@@ -1,0 +1,11 @@
+[package]
+name = "network"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.32.0", features = ["full"] }
+quinn = "0.10.2"
+rustls = { version = "0.21.7", features = ["dangerous_configuration"] }
+rcgen = "0.11.1"
+sha2 = "0.10.8"
