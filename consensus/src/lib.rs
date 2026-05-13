@@ -142,3 +142,42 @@ mod tests {
         assert!(locks.contains(&5));
     }
 }
+
+    #[test]
+    fn test_adversarial_invalid_parent_reference() {
+        // Simulates an attacker proposing a vertex referencing a parent from a DIFFERENT shard
+        let mut dag = Dag::new(1);
+        let creator = b"malicious_node".to_vec();
+        let tx = b"tx_invalid".to_vec();
+
+        // This parent ID does not exist in Shard 1
+        let foreign_parent_id = b"parent_from_shard_2".to_vec();
+
+        let result = dag.propose_vertex(creator, vec![tx], vec![foreign_parent_id]);
+
+        // The consensus logic should reject this immediately
+        assert!(result.is_err());
+        assert_eq!(result.err(), Some("Parent vertex not found in this shard"));
+    }
+
+    #[test]
+    fn test_adversarial_circular_dependency() {
+        // Simulates an attacker trying to create a circular dependency (though our current
+        // hash-based ID generation prevents this practically, we ensure the DAG doesn't loop)
+        let mut dag = Dag::new(2);
+        let creator = b"node_b".to_vec();
+
+        let v1_id = dag.propose_vertex(creator.clone(), vec![b"tx1".to_vec()], vec![]).unwrap();
+
+        // Attempting to propose a vertex where a parent points to itself is physically
+        // impossible with SHA256 IDs, but we test the structure.
+        let result = dag.propose_vertex(creator, vec![b"tx2".to_vec()], vec![v1_id.clone()]);
+        assert!(result.is_ok());
+
+        let v2_id = result.unwrap();
+
+        // Verify DAG is still acyclic by checking parent relationships
+        let vertex2 = dag.vertices.get(&v2_id).unwrap();
+        assert!(vertex2.parents.contains(&v1_id));
+        assert!(!vertex2.parents.contains(&v2_id)); // Cannot contain itself
+    }
