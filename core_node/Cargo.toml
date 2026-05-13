@@ -1,0 +1,16 @@
+[package]
+name = "core_node"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+consensus = { version = "0.1.0", path = "../consensus" }
+crypto = { version = "0.1.0", path = "../crypto" }
+network = { version = "0.1.0", path = "../network" }
+pqcrypto-dilithium = "0.5.0"
+pqcrypto-kyber = "0.8.1"
+storage = { version = "0.1.0", path = "../storage" }
+tokio = { version = "1.32.0", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"

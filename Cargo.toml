@@ -1,5 +1,5 @@
 [workspace]
-members = ["consensus",
+members = ["consensus", "core_node",
     "crypto"
 , "network", "storage"]
 resolver = "2"
