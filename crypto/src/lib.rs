@@ -58,3 +58,4 @@ mod tests {
         assert_eq!(message, verified_message.as_slice(), "Recovered message does not match original");
     }
 }
+pub mod zkp;
