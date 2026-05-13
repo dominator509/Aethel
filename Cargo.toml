@@ -1,5 +1,5 @@
 [workspace]
 members = [
     "crypto"
-, "network"]
+, "network", "storage"]
 resolver = "2"
