@@ -116,3 +116,4 @@ mod tests {
         // Just verify it doesn't panic when building the config
     }
 }
+pub mod dht;

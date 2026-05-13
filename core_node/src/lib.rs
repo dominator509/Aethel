@@ -80,3 +80,4 @@ mod tests {
         assert_eq!(dags.len(), consensus::NUM_SHARDS);
     }
 }
+pub mod recovery;
