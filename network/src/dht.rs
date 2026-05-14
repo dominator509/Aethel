@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 pub type PeerId = Vec<u8>;
+pub const K_BUCKET_SIZE: usize = 20;
 
 /// A bucket holds a list of known peers.
 #[derive(Debug, Clone)]
@@ -55,7 +56,10 @@ impl RoutingTable {
 
         let bucket = self.buckets.entry(bucket_idx).or_default();
         if !bucket.peers.contains(&peer) {
-            bucket.peers.push(peer);
+            // Anti-Eclipse Attack: Enforce maximum bucket size
+            if bucket.peers.len() < K_BUCKET_SIZE {
+                bucket.peers.push(peer);
+            }
         }
     }
 

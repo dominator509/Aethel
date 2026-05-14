@@ -59,6 +59,11 @@ impl Dag {
 
     /// Validates a transaction's cryptographic properties before adding it to the mempool
     pub fn validate_and_add_tx(&mut self, tx: Transaction) -> Result<(), &'static str> {
+        // Anti-DoS: Check if transaction already exists before performing expensive cryptographic verification
+        if self.mempool.contains_key(&tx.id) {
+            return Err("Transaction already exists in mempool");
+        }
+
         if self.mempool.len() >= MAX_MEMPOOL_SIZE {
             return Err("Mempool capacity exceeded. Dropping transaction to prevent OOM.");
         }
@@ -117,8 +122,10 @@ impl Dag {
         };
 
         // Remove from mempool since they are now in the DAG
+        // Also garbage collect cross-shard locks to prevent memory leaks
         for tx in &txs {
             self.mempool.remove(tx);
+            self.cross_shard_locks.remove(tx);
         }
 
         self.vertices.insert(id.clone(), vertex);
