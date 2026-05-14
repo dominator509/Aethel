@@ -34,8 +34,11 @@ impl Transaction {
     }
 
     /// Computes the hash of the transaction components
+    /// Computes the hash of the transaction components using Domain Separation
     pub fn hash(&self) -> Vec<u8> {
         let mut hasher = Sha256::new();
+        // Domain Separation: Prevents Mainnet/Testnet Replay Attacks
+        hasher.update(b"AETHEL_MAINNET_V1");
         hasher.update(self.sender.as_bytes());
         hasher.update(self.receiver.as_bytes());
         hasher.update(self.amount_proof.commitment.as_bytes());

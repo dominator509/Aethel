@@ -12,6 +12,7 @@ pub struct SSTable {
 }
 
 const MAX_ALLOCATION_SIZE: u32 = 10 * 1024 * 1024; // 10MB
+const MAX_KEYS_PER_COMPACTION: usize = 500_000;
 
 impl SSTable {
     /// Flushes an in-memory MemTable (BTreeMap) to an SSTable on disk.
@@ -49,6 +50,13 @@ impl SSTable {
             let mut file = File::open(&table.path).await?;
 
             loop {
+                if merged.len() >= MAX_KEYS_PER_COMPACTION {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::OutOfMemory,
+                        "Compaction aborted: Too many keys requested, potential OOM detected."
+                    ));
+                }
+
                 let key_len = match file.read_u32().await {
                     Ok(len) => len,
                     Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,

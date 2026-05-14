@@ -141,16 +141,23 @@ impl Node {
         let endpoint_clone = self.endpoint.clone();
 
         tokio::spawn(async move {
+            // Anti-DoS: Hard limit on active incoming connections
+            let connection_semaphore = Arc::new(tokio::sync::Semaphore::new(10_000));
+
             while let Some(incoming) = endpoint_clone.accept().await {
-                if let Ok(connection) = incoming.await {
-                    let tx_clone = tx.clone();
-                    tokio::spawn(async move {
-                        while let Ok(mut stream) = connection.accept_uni().await {
-                            if let Ok(buf) = stream.read_to_end(1024 * 1024).await {
-                                let _ = tx_clone.send(buf).await;
+                if let Ok(permit) = connection_semaphore.clone().acquire_owned().await {
+                    if let Ok(connection) = incoming.await {
+                        let tx_clone = tx.clone();
+                        tokio::spawn(async move {
+                            let _permit_holder = permit; // Hold permit until connection closes
+
+                            while let Ok(mut stream) = connection.accept_uni().await {
+                                if let Ok(buf) = stream.read_to_end(1024 * 1024).await {
+                                    let _ = tx_clone.send(buf).await;
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 }
             }
         });
