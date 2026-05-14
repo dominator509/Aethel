@@ -126,14 +126,23 @@ impl Node {
 
     pub async fn broadcast_transaction(&self, tx_bytes: &[u8], peers: &[(SocketAddr, Vec<u8>)]) {
         for (addr, expected_peer_id) in peers {
+            let endpoint = self.endpoint.clone();
             let client_config = Self::make_client_config(expected_peer_id.clone());
-            if let Ok(conn) = self.endpoint.connect_with(client_config, *addr, "aethel.network") {
-                if let Ok(connection) = conn.await {
-                    if let Ok(mut stream) = connection.open_uni().await {
-                        let _ = stream.write_all(tx_bytes).await;
+            let addr_clone = *addr;
+            let tx_bytes_clone = tx_bytes.to_vec();
+
+            tokio::spawn(async move {
+                // Anti-Blocking: Ensure a slow peer doesn't hang the broadcast task
+                let _ = timeout(Duration::from_secs(3), async {
+                    if let Ok(conn) = endpoint.connect_with(client_config, addr_clone, "aethel.network") {
+                        if let Ok(connection) = conn.await {
+                            if let Ok(mut stream) = connection.open_uni().await {
+                                let _ = stream.write_all(&tx_bytes_clone).await;
+                            }
+                        }
                     }
-                }
-            }
+                }).await;
+            });
         }
     }
 

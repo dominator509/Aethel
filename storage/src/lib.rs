@@ -10,6 +10,7 @@ use bytes::Bytes;
 
 /// Basic entry in the Write-Ahead Log and MemTable
 pub const MAX_WAL_SIZE: u64 = 64 * 1024 * 1024; // 64MB
+pub const MAX_MEMTABLE_SIZE: usize = 1_000_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -110,11 +111,19 @@ impl StorageEngine {
 
     /// Fast write path: Append to WAL, then insert into MemTable
     pub async fn put(&self, key: Bytes, value: Bytes) -> std::io::Result<()> {
+        let mut memtable = self.memtable.write().await;
+        if memtable.map.len() >= MAX_MEMTABLE_SIZE {
+            // Anti-Exhaustion: Apply backpressure and prevent OOM if the MemTable is full
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::OutOfMemory,
+                "MemTable is at capacity and requires an SSTable flush before accepting new writes"
+            ));
+        }
+
         let mut wal = self.wal.write().await;
         wal.append(&key, &value).await?;
         drop(wal); // Drop lock early
 
-        let mut memtable = self.memtable.write().await;
         memtable.insert(key, value);
 
         Ok(())
