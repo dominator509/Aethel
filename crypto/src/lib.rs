@@ -59,3 +59,4 @@ mod tests {
     }
 }
 pub mod zkp;
+pub mod transaction;

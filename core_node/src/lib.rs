@@ -4,6 +4,8 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use bytes::Bytes;
+use sha2::Digest;
 
 use consensus::Dag;
 use crypto::{generate_kyber_keypair, generate_dilithium_keypair};
@@ -11,6 +13,8 @@ use network::Node as NetworkNode;
 use storage::StorageEngine;
 use pqcrypto_kyber::kyber1024;
 use pqcrypto_dilithium::dilithium5;
+
+pub mod recovery;
 
 /// The Core Aethel Node integrating all Phase sub-components.
 pub struct AethelNode {
@@ -30,7 +34,7 @@ pub struct AethelNode {
 
 impl AethelNode {
     /// Bootstraps a new Aethel Node
-    pub async fn bootstrap(bind_addr: SocketAddr, storage_path: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn bootstrap(bind_addr: SocketAddr, storage_path: PathBuf) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
         // 1. Initialize Cryptographic Identity (PQC)
         let kyber_keys = generate_kyber_keypair();
         let dilithium_keys = generate_dilithium_keypair();
@@ -48,13 +52,46 @@ impl AethelNode {
         }
         let dags = Arc::new(RwLock::new(shards));
 
-        Ok(Self {
+        let node = Arc::new(Self {
             kyber_keys,
             dilithium_keys,
             network,
             storage,
             dags,
-        })
+        });
+
+        // 5. Start background transaction listener loop
+        node.start_transaction_listener().await;
+
+        Ok(node)
+    }
+
+    /// Spawns a background task to process incoming network transactions
+    async fn start_transaction_listener(self: &Arc<Self>) {
+        let network = self.network.clone();
+        let dags = self.dags.clone();
+        let storage = self.storage.clone();
+
+        tokio::spawn(async move {
+            let mut rx = network.listen_for_transactions().await;
+
+            while let Some(tx_bytes) = rx.recv().await {
+                // In a real implementation, we would deserialize `tx_bytes` into a `crypto::transaction::Transaction`.
+                // For this milestone, we simulate the pipeline if the bytes were valid:
+
+                // 1. Write the raw bytes to the LSM-Tree Storage Engine for persistence
+                // We use a dummy key (e.g. SHA256 of the bytes)
+                let tx_key = Bytes::from(sha2::Sha256::digest(&tx_bytes).to_vec());
+                let tx_val = Bytes::from(tx_bytes);
+
+                let _ = storage.put(tx_key.clone(), tx_val).await;
+
+                // 2. In a real system, we'd pass the deserialized `Transaction` to:
+                // let shard_id = Dag::hash_to_shard(&tx.id);
+                // let mut all_dags = dags.write().await;
+                // let _ = all_dags[shard_id].validate_and_add_tx(tx);
+            }
+        });
     }
 }
 
@@ -80,4 +117,3 @@ mod tests {
         assert_eq!(dags.len(), consensus::NUM_SHARDS);
     }
 }
-pub mod recovery;

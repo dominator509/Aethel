@@ -6,6 +6,8 @@ use std::sync::Arc;
 use std::net::SocketAddr;
 use sha2::{Sha256, Digest};
 
+pub mod dht;
+
 /// Custom certificate verifier that validates a node's identity based on its certificate hash.
 /// In a real P2P network, you'd verify this against the expected PeerID (e.g., hash of public key).
 struct PeerIdVerifier {
@@ -94,6 +96,48 @@ impl Node {
 
         ClientConfig::new(Arc::new(crypto))
     }
+
+    /// Broadcasts a serialized transaction to a list of peer addresses.
+    pub async fn broadcast_transaction(&self, tx_bytes: &[u8], peers: &[(SocketAddr, Vec<u8>)]) {
+        for (addr, expected_peer_id) in peers {
+            let client_config = Self::make_client_config(expected_peer_id.clone());
+            // quinn 0.10 endpoint.connect_with
+            if let Ok(conn) = self.endpoint.connect_with(client_config, *addr, "aethel.network") {
+                if let Ok(connection) = conn.await {
+                    if let Ok(mut stream) = connection.open_uni().await {
+                        // We ignore write errors for broadcast "fire and forget"
+                        let _ = stream.write_all(tx_bytes).await;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Listens for incoming transaction streams on the endpoint.
+    /// Returns a channel receiver that yields serialized transactions.
+    pub async fn listen_for_transactions(&self) -> tokio::sync::mpsc::Receiver<Vec<u8>> {
+        let (tx, rx) = tokio::sync::mpsc::channel(1024);
+
+        let endpoint_clone = self.endpoint.clone();
+
+        tokio::spawn(async move {
+            while let Some(incoming) = endpoint_clone.accept().await {
+                if let Ok(connection) = incoming.await {
+                    let tx_clone = tx.clone();
+                    tokio::spawn(async move {
+                        while let Ok(mut stream) = connection.accept_uni().await {
+                            // limit to 1MB per transaction to prevent DoS
+                            if let Ok(buf) = stream.read_to_end(1024 * 1024).await {
+                                let _ = tx_clone.send(buf).await;
+                            }
+                        }
+                    });
+                }
+            }
+        });
+
+        rx
+    }
 }
 
 #[cfg(test)]
@@ -116,4 +160,3 @@ mod tests {
         // Just verify it doesn't panic when building the config
     }
 }
-pub mod dht;

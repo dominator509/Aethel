@@ -108,6 +108,7 @@ dependencies = [
 name = "consensus"
 version = "0.1.0"
 dependencies = [
+ "crypto",
  "sha2 0.11.0",
 ]
 
@@ -137,11 +138,13 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 name = "core_node"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "consensus",
  "crypto",
  "network",
  "pqcrypto-dilithium",
  "pqcrypto-kyber",
+ "sha2 0.11.0",
  "storage",
  "tempfile",
  "tokio",
@@ -177,6 +180,7 @@ dependencies = [
  "pqcrypto-traits",
  "rand",
  "rand_core",
+ "sha2 0.11.0",
 ]
 
 [[package]]

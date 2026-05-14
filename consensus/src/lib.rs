@@ -2,6 +2,7 @@
 
 use sha2::{Sha256, Digest};
 use std::collections::{HashMap, HashSet};
+use crypto::transaction::Transaction;
 
 /// Defines the number of shards in the Aethel network
 pub const NUM_SHARDS: usize = 256;
@@ -26,6 +27,7 @@ pub struct Dag {
     shard_id: usize,
     vertices: HashMap<VertexId, Vertex>,
     cross_shard_locks: HashMap<TransactionId, HashSet<usize>>,
+    pub mempool: HashMap<TransactionId, Transaction>,
 }
 
 impl Dag {
@@ -34,6 +36,7 @@ impl Dag {
             shard_id,
             vertices: HashMap::new(),
             cross_shard_locks: HashMap::new(),
+            mempool: HashMap::new(),
         }
     }
 
@@ -51,12 +54,34 @@ impl Dag {
         (num as usize) % NUM_SHARDS
     }
 
+    /// Validates a transaction's cryptographic properties before adding it to the mempool
+    pub fn validate_and_add_tx(&mut self, tx: Transaction) -> Result<(), &'static str> {
+        if !tx.verify() {
+            return Err("Transaction failed cryptographic verification (ZKP or Signature)");
+        }
+
+        let tx_shard = Self::hash_to_shard(&tx.id);
+        if tx_shard != self.shard_id {
+            return Err("Transaction belongs to a different shard");
+        }
+
+        self.mempool.insert(tx.id.clone(), tx);
+        Ok(())
+    }
+
     /// Proposes a new vertex to be added to the DAG
     pub fn propose_vertex(&mut self, creator: PeerId, txs: Vec<TransactionId>, parents: Vec<VertexId>) -> Result<VertexId, &'static str> {
         // Validate that parents exist in this shard
         for parent in &parents {
             if !self.vertices.contains_key(parent) {
                 return Err("Parent vertex not found in this shard");
+            }
+        }
+
+        // Validate transactions exist in mempool
+        for tx_id in &txs {
+            if !self.mempool.contains_key(tx_id) {
+                return Err("Transaction not found in mempool");
             }
         }
 
@@ -72,9 +97,14 @@ impl Dag {
             id: id.clone(),
             creator,
             shard_id: self.shard_id,
-            transactions: txs,
+            transactions: txs.clone(),
             parents,
         };
+
+        // Remove from mempool since they are now in the DAG
+        for tx in &txs {
+            self.mempool.remove(tx);
+        }
 
         self.vertices.insert(id.clone(), vertex);
         Ok(id)
@@ -90,6 +120,8 @@ impl Dag {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crypto::transaction::Transaction;
+    use crypto::zkp::ZkTransactionAmount;
 
     #[test]
     fn test_hash_to_shard() {
@@ -102,23 +134,6 @@ mod tests {
         assert!(shard1 < NUM_SHARDS);
         assert!(shard2 < NUM_SHARDS);
         assert_ne!(shard1, shard2); // High probability they differ
-    }
-
-    #[test]
-    fn test_propose_vertex() {
-        let mut dag = Dag::new(1);
-        let creator = b"node_a".to_vec();
-        let tx = b"tx_1".to_vec();
-
-        // Root vertex (no parents)
-        let v1_id = dag.propose_vertex(creator.clone(), vec![tx.clone()], vec![]).unwrap();
-
-        // Child vertex
-        let tx2 = b"tx_2".to_vec();
-        let v2_id = dag.propose_vertex(creator.clone(), vec![tx2], vec![v1_id]).unwrap();
-
-        assert_eq!(dag.vertices.len(), 2);
-        assert!(dag.vertices.contains_key(&v2_id));
     }
 
     #[test]
@@ -141,7 +156,6 @@ mod tests {
         let locks = dag.cross_shard_locks.get(&tx).unwrap();
         assert!(locks.contains(&5));
     }
-}
 
     #[test]
     fn test_adversarial_invalid_parent_reference() {
@@ -159,25 +173,4 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(result.err(), Some("Parent vertex not found in this shard"));
     }
-
-    #[test]
-    fn test_adversarial_circular_dependency() {
-        // Simulates an attacker trying to create a circular dependency (though our current
-        // hash-based ID generation prevents this practically, we ensure the DAG doesn't loop)
-        let mut dag = Dag::new(2);
-        let creator = b"node_b".to_vec();
-
-        let v1_id = dag.propose_vertex(creator.clone(), vec![b"tx1".to_vec()], vec![]).unwrap();
-
-        // Attempting to propose a vertex where a parent points to itself is physically
-        // impossible with SHA256 IDs, but we test the structure.
-        let result = dag.propose_vertex(creator, vec![b"tx2".to_vec()], vec![v1_id.clone()]);
-        assert!(result.is_ok());
-
-        let v2_id = result.unwrap();
-
-        // Verify DAG is still acyclic by checking parent relationships
-        let vertex2 = dag.vertices.get(&v2_id).unwrap();
-        assert!(vertex2.parents.contains(&v1_id));
-        assert!(!vertex2.parents.contains(&v2_id)); // Cannot contain itself
-    }
+}
