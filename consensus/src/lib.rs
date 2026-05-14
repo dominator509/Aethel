@@ -6,6 +6,9 @@ use std::collections::{HashMap, HashSet};
 
 /// Defines the number of shards in the Aethel network
 pub const NUM_SHARDS: usize = 256;
+pub const MAX_MEMPOOL_SIZE: usize = 100_000;
+pub const MAX_TXS_PER_VERTEX: usize = 10_000;
+pub const MAX_PARENTS_PER_VERTEX: usize = 10;
 
 /// Represents a simple transaction identifier (could be a hash in a full implementation)
 pub type TransactionId = Vec<u8>;
@@ -56,6 +59,10 @@ impl Dag {
 
     /// Validates a transaction's cryptographic properties before adding it to the mempool
     pub fn validate_and_add_tx(&mut self, tx: Transaction) -> Result<(), &'static str> {
+        if self.mempool.len() >= MAX_MEMPOOL_SIZE {
+            return Err("Mempool capacity exceeded. Dropping transaction to prevent OOM.");
+        }
+
         if !tx.verify() {
             return Err("Transaction failed cryptographic verification (ZKP or Signature)");
         }
@@ -71,6 +78,14 @@ impl Dag {
 
     /// Proposes a new vertex to be added to the DAG
     pub fn propose_vertex(&mut self, creator: PeerId, txs: Vec<TransactionId>, parents: Vec<VertexId>) -> Result<VertexId, &'static str> {
+        if txs.len() > MAX_TXS_PER_VERTEX {
+            return Err("Too many transactions in vertex proposal");
+        }
+
+        if parents.len() > MAX_PARENTS_PER_VERTEX {
+            return Err("Too many parents in vertex proposal");
+        }
+
         // Validate that parents exist in this shard
         for parent in &parents {
             if !self.vertices.contains_key(parent) {

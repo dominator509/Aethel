@@ -11,6 +11,8 @@ pub struct SSTable {
     pub path: PathBuf,
 }
 
+const MAX_ALLOCATION_SIZE: u32 = 10 * 1024 * 1024; // 10MB
+
 impl SSTable {
     /// Flushes an in-memory MemTable (BTreeMap) to an SSTable on disk.
     pub async fn flush_memtable(memtable: &BTreeMap<Bytes, Bytes>, path: PathBuf) -> std::io::Result<Self> {
@@ -53,6 +55,13 @@ impl SSTable {
                     Err(e) => return Err(e),
                 };
                 let val_len = file.read_u32().await?;
+
+                if key_len > MAX_ALLOCATION_SIZE || val_len > MAX_ALLOCATION_SIZE {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Data chunk exceeds maximum safe allocation limit (Potential OOM DoS)"
+                    ));
+                }
 
                 let mut key = vec![0u8; key_len as usize];
                 file.read_exact(&mut key).await?;
