@@ -16,6 +16,7 @@ impl SSTable {
     pub async fn flush_memtable(memtable: &BTreeMap<Bytes, Bytes>, path: PathBuf) -> std::io::Result<Self> {
         let mut file = OpenOptions::new()
             .create(true)
+            .truncate(true)
             .write(true)
             .open(&path)
             .await?;

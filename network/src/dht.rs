@@ -10,6 +10,12 @@ pub struct Bucket {
     pub peers: Vec<PeerId>,
 }
 
+impl Default for Bucket {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Bucket {
     pub fn new() -> Self {
         Self { peers: Vec::new() }
@@ -47,7 +53,7 @@ impl RoutingTable {
         // Simple bucketing based on raw distance
         let bucket_idx = dist % 256;
 
-        let bucket = self.buckets.entry(bucket_idx).or_insert_with(Bucket::new);
+        let bucket = self.buckets.entry(bucket_idx).or_default();
         if !bucket.peers.contains(&peer) {
             bucket.peers.push(peer);
         }

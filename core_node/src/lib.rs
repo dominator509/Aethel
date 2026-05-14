@@ -8,19 +8,19 @@ use bytes::Bytes;
 use sha2::Digest;
 
 use consensus::Dag;
-use crypto::{generate_kyber_keypair, generate_dilithium_keypair};
+use crypto::{generate_mlkem_keypair, generate_mldsa_keypair};
 use network::Node as NetworkNode;
 use storage::StorageEngine;
-use pqcrypto_kyber::kyber1024;
-use pqcrypto_dilithium::dilithium5;
+use pqcrypto_mlkem::mlkem1024;
+use pqcrypto_mldsa::mldsa87;
 
 pub mod recovery;
 
 /// The Core Aethel Node integrating all Phase sub-components.
 pub struct AethelNode {
     /// Post-Quantum identity and encryption keys
-    pub kyber_keys: (kyber1024::PublicKey, kyber1024::SecretKey),
-    pub dilithium_keys: (dilithium5::PublicKey, dilithium5::SecretKey),
+    pub kyber_keys: (mlkem1024::PublicKey, mlkem1024::SecretKey),
+    pub dilithium_keys: (mldsa87::PublicKey, mldsa87::SecretKey),
 
     /// QUIC Transport layer
     pub network: Arc<NetworkNode>,
@@ -36,8 +36,8 @@ impl AethelNode {
     /// Bootstraps a new Aethel Node
     pub async fn bootstrap(bind_addr: SocketAddr, storage_path: PathBuf) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
         // 1. Initialize Cryptographic Identity (PQC)
-        let kyber_keys = generate_kyber_keypair();
-        let dilithium_keys = generate_dilithium_keypair();
+        let kyber_keys = generate_mlkem_keypair();
+        let dilithium_keys = generate_mldsa_keypair();
 
         // 2. Initialize Networking (QUIC)
         let network = Arc::new(NetworkNode::new(bind_addr)?);
@@ -69,7 +69,7 @@ impl AethelNode {
     /// Spawns a background task to process incoming network transactions
     async fn start_transaction_listener(self: &Arc<Self>) {
         let network = self.network.clone();
-        let dags = self.dags.clone();
+        let _dags = self.dags.clone();
         let storage = self.storage.clone();
 
         tokio::spawn(async move {

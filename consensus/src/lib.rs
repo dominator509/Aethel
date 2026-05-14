@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 use sha2::{Sha256, Digest};
-use std::collections::{HashMap, HashSet};
 use crypto::transaction::Transaction;
+use std::collections::{HashMap, HashSet};
 
 /// Defines the number of shards in the Aethel network
 pub const NUM_SHARDS: usize = 256;
@@ -112,7 +112,7 @@ impl Dag {
 
     /// Lock a cross-shard transaction
     pub fn lock_cross_shard_tx(&mut self, tx_id: TransactionId) {
-        let locks = self.cross_shard_locks.entry(tx_id).or_insert_with(HashSet::new);
+        let locks = self.cross_shard_locks.entry(tx_id).or_default();
         locks.insert(self.shard_id);
     }
 }
@@ -120,8 +120,6 @@ impl Dag {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crypto::transaction::Transaction;
-    use crypto::zkp::ZkTransactionAmount;
 
     #[test]
     fn test_hash_to_shard() {

@@ -8,8 +8,8 @@ bytes = "1.11.1"
 consensus = { version = "0.1.0", path = "../consensus" }
 crypto = { version = "0.1.0", path = "../crypto" }
 network = { version = "0.1.0", path = "../network" }
-pqcrypto-dilithium = "0.5.0"
-pqcrypto-kyber = "0.8.1"
+pqcrypto-mldsa = "0.1.2"
+pqcrypto-mlkem = "0.1.1"
 sha2 = "0.11.0"
 storage = { version = "0.1.0", path = "../storage" }
 tokio = { version = "1.32.0", features = ["full"] }
