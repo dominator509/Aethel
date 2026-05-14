@@ -6,6 +6,7 @@ use rustls::client::danger::{ServerCertVerifier, ServerCertVerified, HandshakeSi
 use rustls::crypto::aws_lc_rs::default_provider;
 use std::sync::Arc;
 use std::net::SocketAddr;
+use tokio::time::{timeout, Duration};
 use sha2::{Sha256, Digest};
 use quinn::crypto::rustls::{QuicServerConfig, QuicClientConfig};
 
@@ -152,7 +153,8 @@ impl Node {
                             let _permit_holder = permit; // Hold permit until connection closes
 
                             while let Ok(mut stream) = connection.accept_uni().await {
-                                if let Ok(buf) = stream.read_to_end(1024 * 1024).await {
+                                // Anti-Slowloris: 5-second strict timeout on reading transaction payload
+                                if let Ok(Ok(buf)) = timeout(Duration::from_secs(5), stream.read_to_end(1024 * 1024)).await {
                                     let _ = tx_clone.send(buf).await;
                                 }
                             }
