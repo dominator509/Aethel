@@ -1,0 +1,4 @@
+    Checking network v0.1.0 (/app/network)
+    Checking storage v0.1.0 (/app/storage)
+    Checking core_node v0.1.0 (/app/core_node)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.83s
