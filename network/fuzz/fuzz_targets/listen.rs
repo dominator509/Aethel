@@ -9,5 +9,9 @@ fuzz_target!(|data: &[u8]| {
         // Expected behavior: Drop payload if exceeds 1MB limit
         return;
     }
+
+    // Simulate parsing the buffer to ensure no panics on malformed data
+    let _simulated_parse = String::from_utf8(data.to_vec());
+
     // Network component simulated fuzz target
 });

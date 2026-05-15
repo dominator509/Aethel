@@ -103,3 +103,6 @@ mod tests {
         assert_eq!(monitor.state, ProtocolState::Running);
     }
 }
+
+## Pass 2 Verification
+*   **Resilience Monitor Verification:** Re-reviewed `core_node/src/recovery.rs`. The Fail-Closed state safely triggers upon heartbeat threshold failures, protecting the consensus integrity during network partitions.

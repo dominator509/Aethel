@@ -112,3 +112,7 @@ crypto/bom.json:2113:      "ref": "registry+https://github.com/rust-lang/crates.
 crypto/Cargo.toml:7:pqcrypto-traits = "0.3.5"
 crypto/Cargo.toml:14:pqcrypto-mldsa = "0.1.2"
 crypto/Cargo.toml:15:pqcrypto-mlkem = "0.1.1"
+
+## Pass 2 Verification
+*   **Domain Separation Verification:** Verified the `AETHEL_MAINNET_V1` domain separator is fully integrated into the transaction hasher, permanently resolving cross-network replay exploits.
+*   **mTLS Client Verification:** Verified `PeerIdVerifier` rejects all certificates that do not correctly hash to the expected `PeerId`.

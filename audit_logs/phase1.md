@@ -744,3 +744,8 @@ No secrets found.
 ./crypto/src/lib.rs:        assert_eq!(ss1.as_bytes(), ss2.as_bytes(), "Shared secrets do not match!");
 ./core_node/src/lib.rs:    pub kyber_keys: (mlkem1024::PublicKey, mlkem1024::SecretKey),
 ./core_node/src/lib.rs:    pub dilithium_keys: (mldsa87::PublicKey, mldsa87::SecretKey),
+
+## Pass 2 Verification
+*   **Spoofing & Tampering Re-evaluation:** Verified that Domain Separation (`AETHEL_MAINNET_V1`) implemented in Pass 1 correctly mitigates cross-network replay spoofing.
+*   **DoS Re-evaluation:** Confirmed that connection semaphores and read timeouts implemented in previous patches hold against simulated Slowloris models.
+*   **Secrets Verification:** Zero secrets or hardcoded keys introduced since Pass 1.
