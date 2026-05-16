@@ -14,3 +14,7 @@
 
 ## Pass 2 Verification
 *   **Fuzzing Harness Expansion:** Expanded `network/fuzz/fuzz_targets/listen.rs` to simulate payload decoding and ensure panic-free stability on malformed byte arrays.
+
+## Pass 3 Verification
+*   **DAST/Input Validation:** All input boundaries (`MAX_ALLOCATION_SIZE`, QUIC read timeouts, QUIC concurrent semaphores) remain hardened against external injection/flooding.
+*   **Fuzz Testing:** Network listener fuzzing harness structurally ready for CI execution.

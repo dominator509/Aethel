@@ -116,3 +116,7 @@ crypto/Cargo.toml:15:pqcrypto-mlkem = "0.1.1"
 ## Pass 2 Verification
 *   **Domain Separation Verification:** Verified the `AETHEL_MAINNET_V1` domain separator is fully integrated into the transaction hasher, permanently resolving cross-network replay exploits.
 *   **mTLS Client Verification:** Verified `PeerIdVerifier` rejects all certificates that do not correctly hash to the expected `PeerId`.
+
+## Pass 3 Verification
+*   **Access Control:** Re-verified Leaderless BFT execution means no privilege escalation paths exist locally.
+*   **Cryptography:** PQC primitives (ML-DSA, ML-KEM) and Bulletproofs logic remain structurally isolated and functionally tested. Domain separators are intact.

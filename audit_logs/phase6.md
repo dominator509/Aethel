@@ -106,3 +106,6 @@ mod tests {
 
 ## Pass 2 Verification
 *   **Resilience Monitor Verification:** Re-reviewed `core_node/src/recovery.rs`. The Fail-Closed state safely triggers upon heartbeat threshold failures, protecting the consensus integrity during network partitions.
+
+## Pass 3 Verification
+*   **Operational Resilience:** Heartbeat tracking and the `Fail-Closed` partition protocol confirmed functionally tested via `core_node::recovery::tests`. Protocol state successfully halts without localized manual intervention, ensuring deterministic crash-safety.

@@ -13,3 +13,19 @@ paste 1.0.15
     │   └── consensus 0.1.0
     │       └── core_node 0.1.0
     └── core_node 0.1.0
+
+Crate:     paste
+Version:   1.0.15
+Warning:   unmaintained
+Title:     paste - no longer maintained
+Date:      2024-10-07
+ID:        RUSTSEC-2024-0436
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0436
+Dependency tree:
+paste 1.0.15
+└── pqcrypto-mldsa 0.1.2
+    ├── crypto 0.1.0
+    │   ├── core_node 0.1.0
+    │   └── consensus 0.1.0
+    │       └── core_node 0.1.0
+    └── core_node 0.1.0
