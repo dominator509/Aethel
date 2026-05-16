@@ -112,3 +112,6 @@ mod tests {
 
 ## Pass 4 Verification
 *   **Operational Resilience:** Re-verified that the `Fail-Closed` partition protocol inside `core_node/src/recovery.rs` ensures strict state consistency over liveness, mitigating disaster recovery risks during severe network events.
+
+## Pass 5 Verification
+*   **Operational Resilience:** Evaluated DR readiness of `core_node/src/recovery.rs`. Time-based threshold tracking correctly identifies and segregates unresponsive partitions.

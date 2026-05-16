@@ -124,3 +124,7 @@ crypto/Cargo.toml:15:pqcrypto-mlkem = "0.1.1"
 ## Pass 4 Verification
 *   **Cryptography:** Re-verified ML-DSA/ML-KEM and Bulletproof implementations remain strongly typed and actively enforced in transaction validation (`consensus::Dag::validate_and_add_tx`).
 *   **Identity & Access Control:** TLS settings via `rustls` strictly enforce custom `PeerIdVerifier` checks on all network boundaries.
+
+## Pass 5 Verification
+*   **Cryptographic Primitives:** The integration of ML-KEM/ML-DSA remains strictly separated from business logic, ensuring secure signature aggregation without leaking transaction details.
+*   **TLS Configuration:** Evaluated the implementation of `rustls::crypto::aws_lc_rs::default_provider()` ensuring top-tier side-channel resistance for incoming payload encryption.

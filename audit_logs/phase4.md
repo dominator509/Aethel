@@ -22,3 +22,7 @@
 ## Pass 4 Verification
 *   **Dynamic Testing Boundaries:** Re-verified all state bounds (`MAX_ALLOCATION_SIZE`, QUIC read timeouts, QUIC concurrent semaphores, `MAX_MEMPOOL_SIZE`, `K_BUCKET_SIZE`). These limits maintain the network's resilience against interaction-driven DoS.
 *   **Fuzz Testing:** Network listener fuzzing harness remains preserved and documented for CI environments at `network/fuzz/fuzz_targets/listen.rs`.
+
+## Pass 5 Verification
+*   **Boundary Values:** Re-verified critical limits in `storage::MAX_ALLOCATION_SIZE`, `network::K_BUCKET_SIZE`, and `consensus::MAX_MEMPOOL_SIZE`. All bounds effectively trap excessive memory or file requests.
+*   **Fuzz Testing:** The testing harness remains prepared for continuous fuzzing cycles of network input decoding logic.
