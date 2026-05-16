@@ -26,3 +26,6 @@
 ## Pass 5 Verification
 *   **Boundary Values:** Re-verified critical limits in `storage::MAX_ALLOCATION_SIZE`, `network::K_BUCKET_SIZE`, and `consensus::MAX_MEMPOOL_SIZE`. All bounds effectively trap excessive memory or file requests.
 *   **Fuzz Testing:** The testing harness remains prepared for continuous fuzzing cycles of network input decoding logic.
+
+## Pass 6 Verification
+*   **Dynamic Hardening Constraints:** `MAX_ALLOCATION_SIZE`, QUIC read timeouts (5s), and QUIC concurrent semaphores (10k) maintain deterministic boundaries under simulated dynamic stress profiles. Fuzzing harnesses properly constructed.

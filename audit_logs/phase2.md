@@ -27,3 +27,7 @@ The Aethel network is a foundational Layer-1 DAG written in native Rust. It does
 *   **SAST & SCA:** 0 active CVEs detected. Code remains safe under strict `clippy` checks.
 *   **SBOM Generation:** Artifacts re-signed and stored securely in JSON format.
 *   **EVM Bypass:** Verified logic remains securely mapped to Rust L1. No WASM/EVM vectors present.
+
+## Pass 6 Verification
+*   **SAST & SCA:** Re-verified. 0 active CVEs. Clippy is enforcing strict static analysis bounds without emitting new warnings.
+*   **SBOM Generation:** Overwritten `audit_logs/sbom.json`. Supply chain is clean and deterministic.

@@ -128,3 +128,6 @@ crypto/Cargo.toml:15:pqcrypto-mlkem = "0.1.1"
 ## Pass 5 Verification
 *   **Cryptographic Primitives:** The integration of ML-KEM/ML-DSA remains strictly separated from business logic, ensuring secure signature aggregation without leaking transaction details.
 *   **TLS Configuration:** Evaluated the implementation of `rustls::crypto::aws_lc_rs::default_provider()` ensuring top-tier side-channel resistance for incoming payload encryption.
+
+## Pass 6 Verification
+*   **Cryptography Boundaries:** Deep re-validation confirms Bulletproofs ZKP and `pqcrypto` operations occur successfully isolated from mempool/network logic. Domain separator `AETHEL_MAINNET_V1` ensures zero-cross-replay risk.

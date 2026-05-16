@@ -115,3 +115,6 @@ mod tests {
 
 ## Pass 5 Verification
 *   **Operational Resilience:** Evaluated DR readiness of `core_node/src/recovery.rs`. Time-based threshold tracking correctly identifies and segregates unresponsive partitions.
+
+## Pass 6 Verification
+*   **Chaos Resilience:** `core_node/src/recovery.rs` continues to correctly enforce partition halts and protocol hibernation under node isolation scenarios.
