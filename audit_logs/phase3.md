@@ -120,3 +120,7 @@ crypto/Cargo.toml:15:pqcrypto-mlkem = "0.1.1"
 ## Pass 3 Verification
 *   **Access Control:** Re-verified Leaderless BFT execution means no privilege escalation paths exist locally.
 *   **Cryptography:** PQC primitives (ML-DSA, ML-KEM) and Bulletproofs logic remain structurally isolated and functionally tested. Domain separators are intact.
+
+## Pass 4 Verification
+*   **Cryptography:** Re-verified ML-DSA/ML-KEM and Bulletproof implementations remain strongly typed and actively enforced in transaction validation (`consensus::Dag::validate_and_add_tx`).
+*   **Identity & Access Control:** TLS settings via `rustls` strictly enforce custom `PeerIdVerifier` checks on all network boundaries.

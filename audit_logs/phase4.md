@@ -18,3 +18,7 @@
 ## Pass 3 Verification
 *   **DAST/Input Validation:** All input boundaries (`MAX_ALLOCATION_SIZE`, QUIC read timeouts, QUIC concurrent semaphores) remain hardened against external injection/flooding.
 *   **Fuzz Testing:** Network listener fuzzing harness structurally ready for CI execution.
+
+## Pass 4 Verification
+*   **Dynamic Testing Boundaries:** Re-verified all state bounds (`MAX_ALLOCATION_SIZE`, QUIC read timeouts, QUIC concurrent semaphores, `MAX_MEMPOOL_SIZE`, `K_BUCKET_SIZE`). These limits maintain the network's resilience against interaction-driven DoS.
+*   **Fuzz Testing:** Network listener fuzzing harness remains preserved and documented for CI environments at `network/fuzz/fuzz_targets/listen.rs`.

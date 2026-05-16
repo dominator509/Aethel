@@ -109,3 +109,6 @@ mod tests {
 
 ## Pass 3 Verification
 *   **Operational Resilience:** Heartbeat tracking and the `Fail-Closed` partition protocol confirmed functionally tested via `core_node::recovery::tests`. Protocol state successfully halts without localized manual intervention, ensuring deterministic crash-safety.
+
+## Pass 4 Verification
+*   **Operational Resilience:** Re-verified that the `Fail-Closed` partition protocol inside `core_node/src/recovery.rs` ensures strict state consistency over liveness, mitigating disaster recovery risks during severe network events.

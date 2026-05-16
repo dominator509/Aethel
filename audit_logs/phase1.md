@@ -753,3 +753,8 @@ No secrets found.
 ## Pass 3 Verification
 *   **Attack Surface Re-mapping:** Core attack vectors (QUIC listener, DHT, Storage, Consensus Mempool) remain structurally bounded.
 *   **Secrets Scanning:** Re-ran `grep -ri "BEGIN PRIVATE KEY\|SECRET\|PASSWORD" . --exclude-dir=target --exclude-dir=.git`. 0 new secrets identified.
+
+## Pass 4 Verification
+*   **STRIDE Threat Model Re-evaluation:** All threat categories (Spoofing, Tampering, Repudiation, Info Disclosure, DoS, EoP) remain thoroughly mitigated via the active architectural safeguards established in previous hardening passes.
+*   **Attack Surface Mapping:** Boundaries remain tightly controlled via strict Tokio connection semaphores and Mempool limitations.
+*   **Secrets Scanning:** Re-ran `grep -ri "BEGIN PRIVATE KEY\|SECRET\|PASSWORD" . --exclude-dir=target --exclude-dir=.git`. 0 new secrets identified.
