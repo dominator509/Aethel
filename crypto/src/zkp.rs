@@ -6,6 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
 /// A Zero-Knowledge Range Proof representing a hidden transaction amount
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct ZkTransactionAmount {
     pub proof: RangeProof,
     pub commitment: CompressedRistretto,

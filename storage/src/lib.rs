@@ -37,9 +37,11 @@ impl Wal {
     /// In a production system, this would be heavily optimized with buffering,
     /// batching, and `fsync` grouping to achieve 3M TPS.
     pub async fn append(&mut self, key: &[u8], value: &[u8]) -> std::io::Result<()> {
-        // Anti-Exhaustion: Ensure the WAL does not grow infinitely and consume the entire disk
+        // In a true 3M TPS system, this metadata check would be batched or cached.
+        // For the sake of this prototype's anti-exhaustion bounds:
         let metadata = self.file.metadata().await?;
         if metadata.len() >= MAX_WAL_SIZE {
+            // A production system would rotate the WAL here automatically.
             return Err(std::io::Error::new(
                 std::io::ErrorKind::FileTooLarge,
                 "WAL has reached maximum capacity and requires rotation"

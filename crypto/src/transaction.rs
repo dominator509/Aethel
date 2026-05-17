@@ -6,6 +6,7 @@ use sha2::{Sha256, Digest};
 use crate::zkp::ZkTransactionAmount;
 
 /// Represents an end-to-end asset transfer
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Transaction {
     /// SHA256 hash of the transaction body
     pub id: Vec<u8>,
