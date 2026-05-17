@@ -701,6 +701,11 @@ dependencies = [
 name = "network"
 version = "0.1.0"
 dependencies = [
+ "bincode",
+ "bytes",
+ "crypto",
+ "curve25519-dalek",
+ "pqcrypto-mldsa",
  "quinn",
  "rcgen",
  "rustls",
