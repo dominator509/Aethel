@@ -1,14 +1,14 @@
 #![forbid(unsafe_code)]
 
-use quinn::{Endpoint, ServerConfig, ClientConfig};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::client::danger::{ServerCertVerifier, ServerCertVerified, HandshakeSignatureValid};
+use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
+use quinn::{ClientConfig, Endpoint, ServerConfig};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::aws_lc_rs::default_provider;
-use std::sync::Arc;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use sha2::{Digest, Sha256};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::time::{timeout, Duration};
-use sha2::{Sha256, Digest};
-use quinn::crypto::rustls::{QuicServerConfig, QuicClientConfig};
 
 pub mod dht;
 
@@ -39,7 +39,9 @@ impl ServerCertVerifier for PeerIdVerifier {
         if cert_hash == self.expected_peer_id {
             Ok(ServerCertVerified::assertion())
         } else {
-            Err(rustls::Error::General("Peer ID mismatch! MITM attack suspected.".to_string()))
+            Err(rustls::Error::General(
+                "Peer ID mismatch! MITM attack suspected.".to_string(),
+            ))
         }
     }
 
@@ -71,7 +73,8 @@ impl ServerCertVerifier for PeerIdVerifier {
     }
 }
 
-pub fn generate_self_signed_cert() -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>), Box<dyn std::error::Error>> {
+pub fn generate_self_signed_cert(
+) -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>), Box<dyn std::error::Error>> {
     let subject_alt_names = vec!["aethel.network".to_string(), "localhost".to_string()];
     let cert = rcgen::generate_simple_self_signed(subject_alt_names)?;
 
@@ -87,9 +90,13 @@ pub fn derive_peer_id(cert: &CertificateDer<'_>) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
+use crate::dht::RoutingTable;
+use tokio::sync::RwLock;
+
 pub struct Node {
     pub endpoint: Endpoint,
     pub cert: CertificateDer<'static>,
+    pub dht: Arc<RwLock<RoutingTable>>,
 }
 
 impl Node {
@@ -97,10 +104,11 @@ impl Node {
         let (cert, key) = generate_self_signed_cert()?;
         let cert_clone = cert.clone();
 
-        let server_crypto = rustls::ServerConfig::builder_with_provider(Arc::new(default_provider()))
-            .with_safe_default_protocol_versions()?
-            .with_no_client_auth()
-            .with_single_cert(vec![cert], key)?;
+        let server_crypto =
+            rustls::ServerConfig::builder_with_provider(Arc::new(default_provider()))
+                .with_safe_default_protocol_versions()?
+                .with_no_client_auth()
+                .with_single_cert(vec![cert], key)?;
 
         let quic_server_crypto = QuicServerConfig::try_from(server_crypto)?;
         let mut server_config = ServerConfig::with_crypto(Arc::new(quic_server_crypto));
@@ -110,12 +118,21 @@ impl Node {
             .max_concurrent_uni_streams(1024_u32.into());
 
         let endpoint = Endpoint::server(server_config, bind_addr)?;
-        Ok(Self { endpoint, cert: cert_clone })
+
+        let local_peer_id = derive_peer_id(&cert_clone);
+        let dht = Arc::new(RwLock::new(RoutingTable::new(local_peer_id)));
+
+        Ok(Self {
+            endpoint,
+            cert: cert_clone,
+            dht,
+        })
     }
 
     pub fn make_client_config(expected_peer_id: Vec<u8>) -> ClientConfig {
         let crypto = rustls::ClientConfig::builder_with_provider(Arc::new(default_provider()))
-            .with_safe_default_protocol_versions().unwrap()
+            .with_safe_default_protocol_versions()
+            .unwrap()
             .dangerous()
             .with_custom_certificate_verifier(PeerIdVerifier::new(expected_peer_id))
             .with_no_client_auth();
@@ -134,14 +151,17 @@ impl Node {
             tokio::spawn(async move {
                 // Anti-Blocking: Ensure a slow peer doesn't hang the broadcast task
                 let _ = timeout(Duration::from_secs(3), async {
-                    if let Ok(conn) = endpoint.connect_with(client_config, addr_clone, "aethel.network") {
+                    if let Ok(conn) =
+                        endpoint.connect_with(client_config, addr_clone, "aethel.network")
+                    {
                         if let Ok(connection) = conn.await {
                             if let Ok(mut stream) = connection.open_uni().await {
                                 let _ = stream.write_all(&tx_bytes_clone).await;
                             }
                         }
                     }
-                }).await;
+                })
+                .await;
             });
         }
     }
@@ -150,6 +170,7 @@ impl Node {
         let (tx, rx) = tokio::sync::mpsc::channel(1024);
         let endpoint_clone = self.endpoint.clone();
 
+        let dht_clone = self.dht.clone();
         tokio::spawn(async move {
             // Anti-DoS: Hard limit on active incoming connections
             let connection_semaphore = Arc::new(tokio::sync::Semaphore::new(10_000));
@@ -158,12 +179,34 @@ impl Node {
                 if let Ok(permit) = connection_semaphore.clone().acquire_owned().await {
                     if let Ok(connection) = incoming.await {
                         let tx_clone = tx.clone();
+
+                        // Extract peer info from connection to populate DHT
+                        // Scope the extraction to ensure the non-Send Box<dyn Any> is dropped before the await
+                        let extracted_peer_id = {
+                            let mut id = None;
+                            if let Some(peer_identity) = connection.peer_identity() {
+                                if let Some(certs) = peer_identity.downcast_ref::<Vec<rustls::pki_types::CertificateDer<'static>>>() {
+                                    if let Some(cert) = certs.first() {
+                                        id = Some(derive_peer_id(cert));
+                                    }
+                                }
+                            }
+                            id
+                        };
+
+                        if let Some(peer_id) = extracted_peer_id {
+                            dht_clone.write().await.add_peer(peer_id);
+                        }
+
                         tokio::spawn(async move {
                             let _permit_holder = permit; // Hold permit until connection closes
 
                             while let Ok(mut stream) = connection.accept_uni().await {
                                 // Anti-Slowloris: 5-second strict timeout on reading transaction payload
-                                if let Ok(Ok(buf)) = timeout(Duration::from_secs(5), stream.read_to_end(1024 * 1024)).await {
+                                if let Ok(Ok(buf)) =
+                                    timeout(Duration::from_secs(5), stream.read_to_end(1024 * 1024))
+                                        .await
+                                {
                                     let _ = tx_clone.send(buf).await;
                                 }
                             }

@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
+use crate::zkp::ZkTransactionAmount;
 use pqcrypto_mldsa::mldsa87;
 use pqcrypto_traits::sign::PublicKey;
-use sha2::{Sha256, Digest};
-use crate::zkp::ZkTransactionAmount;
+use sha2::{Digest, Sha256};
 
 /// Represents an end-to-end asset transfer
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -22,7 +22,11 @@ pub struct Transaction {
 
 impl Transaction {
     /// Creates a new, unsigned transaction
-    pub fn new(sender: mldsa87::PublicKey, receiver: mldsa87::PublicKey, amount_proof: ZkTransactionAmount) -> Self {
+    pub fn new(
+        sender: mldsa87::PublicKey,
+        receiver: mldsa87::PublicKey,
+        amount_proof: ZkTransactionAmount,
+    ) -> Self {
         let mut tx = Self {
             id: Vec::new(),
             sender,

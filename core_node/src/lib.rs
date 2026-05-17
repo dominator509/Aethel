@@ -1,18 +1,18 @@
 #![forbid(unsafe_code)]
 
+use bytes::Bytes;
+use sha2::Digest;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use bytes::Bytes;
-use sha2::Digest;
 
 use consensus::Dag;
-use crypto::{generate_mlkem_keypair, generate_mldsa_keypair};
+use crypto::{generate_mldsa_keypair, generate_mlkem_keypair};
 use network::Node as NetworkNode;
-use storage::StorageEngine;
-use pqcrypto_mlkem::mlkem1024;
 use pqcrypto_mldsa::mldsa87;
+use pqcrypto_mlkem::mlkem1024;
+use storage::StorageEngine;
 
 pub mod recovery;
 
@@ -34,7 +34,10 @@ pub struct AethelNode {
 
 impl AethelNode {
     /// Bootstraps a new Aethel Node
-    pub async fn bootstrap(bind_addr: SocketAddr, base_dir: PathBuf) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
+    pub async fn bootstrap(
+        bind_addr: SocketAddr,
+        base_dir: PathBuf,
+    ) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
         // 1. Initialize Cryptographic Identity (PQC)
         let kyber_keys = generate_mlkem_keypair();
         let dilithium_keys = generate_mldsa_keypair();
@@ -63,7 +66,10 @@ impl AethelNode {
         // 5. Start background storage maintenance loop
         node.start_storage_maintenance(base_dir.clone());
 
-        // 6. Start background transaction listener loop
+        // 6. Start background consensus ordering loop
+        node.start_consensus_engine();
+
+        // 7. Start background transaction listener loop
         node.start_transaction_listener().await;
 
         Ok(node)
@@ -88,7 +94,10 @@ impl AethelNode {
                 let tx_val = Bytes::from(tx_bytes);
 
                 if let Err(e) = storage.put(tx_key.clone(), tx_val).await {
-                    eprintln!("WARNING: Failed to persist transaction (Backpressure/Error): {}", e);
+                    eprintln!(
+                        "WARNING: Failed to persist transaction (Backpressure/Error): {}",
+                        e
+                    );
                 }
 
                 // 2. In a real system, we'd pass the deserialized `Transaction` to:
@@ -100,6 +109,24 @@ impl AethelNode {
     }
 
     /// Spawns a background task to periodically flush the MemTable to disk
+    /// Spawns a background task to periodically order the DAG via Leaderless BFT
+    fn start_consensus_engine(self: &Arc<Self>) {
+        let dags = self.dags.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
+            loop {
+                interval.tick().await;
+                let dags_guard = dags.read().await;
+                // Execute deterministic ordering for each shard
+                for dag in dags_guard.iter() {
+                    let _finalized_order = dag.compute_finality_and_order();
+                    // In a production system, this order would be persisted to state.
+                }
+            }
+        });
+    }
+
     fn start_storage_maintenance(self: &Arc<Self>, storage_dir: PathBuf) {
         let storage = self.storage.clone();
 

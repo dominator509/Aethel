@@ -40,14 +40,15 @@ impl ZkTransactionAmount {
             amount,
             &blinding_factor,
             32, // Support up to 32 bits for the proof initially
-        ).map_err(|_| "Failed to generate range proof")?;
+        )
+        .map_err(|_| "Failed to generate range proof")?;
 
         Ok((
             Self {
                 proof,
                 commitment: commitments,
             },
-            blinding_factor
+            blinding_factor,
         ))
     }
 
@@ -58,13 +59,9 @@ impl ZkTransactionAmount {
 
         let mut transcript = Transcript::new(b"AethelTransactionZKP");
 
-        self.proof.verify_single(
-            &bp_gens,
-            &pc_gens,
-            &mut transcript,
-            &self.commitment,
-            32,
-        ).is_ok()
+        self.proof
+            .verify_single(&bp_gens, &pc_gens, &mut transcript, &self.commitment, 32)
+            .is_ok()
     }
 }
 
@@ -75,7 +72,8 @@ mod tests {
     #[test]
     fn test_valid_range_proof() {
         let amount = 42;
-        let (zkp, _blinding) = ZkTransactionAmount::create_proof(amount).expect("Proof creation failed");
+        let (zkp, _blinding) =
+            ZkTransactionAmount::create_proof(amount).expect("Proof creation failed");
 
         // Proof should verify correctly
         assert!(zkp.verify_proof());

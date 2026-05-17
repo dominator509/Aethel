@@ -1,5 +1,5 @@
-use pqcrypto_mlkem::mlkem1024;
 use pqcrypto_mldsa::mldsa87;
+use pqcrypto_mlkem::mlkem1024;
 use pqcrypto_traits::sign::VerificationError;
 
 /// Generate a Kyber keypair for encapsulation
@@ -13,7 +13,10 @@ pub fn encapsulate(pk: &mlkem1024::PublicKey) -> (mlkem1024::SharedSecret, mlkem
 }
 
 /// Decapsulate a shared secret using a secret key and ciphertext
-pub fn decapsulate(ct: &mlkem1024::Ciphertext, sk: &mlkem1024::SecretKey) -> mlkem1024::SharedSecret {
+pub fn decapsulate(
+    ct: &mlkem1024::Ciphertext,
+    sk: &mlkem1024::SecretKey,
+) -> mlkem1024::SharedSecret {
     mlkem1024::decapsulate(ct, sk)
 }
 
@@ -28,7 +31,10 @@ pub fn sign(message: &[u8], sk: &mldsa87::SecretKey) -> mldsa87::SignedMessage {
 }
 
 /// Verify a Dilithium signature
-pub fn verify(signed_message: &mldsa87::SignedMessage, pk: &mldsa87::PublicKey) -> Result<Vec<u8>, VerificationError> {
+pub fn verify(
+    signed_message: &mldsa87::SignedMessage,
+    pk: &mldsa87::PublicKey,
+) -> Result<Vec<u8>, VerificationError> {
     mldsa87::open(signed_message, pk)
 }
 
@@ -43,7 +49,11 @@ mod tests {
         let (ss1, ct) = encapsulate(&pk);
         let ss2 = decapsulate(&ct, &sk);
 
-        assert_eq!(ss1.as_bytes(), ss2.as_bytes(), "Shared secrets do not match!");
+        assert_eq!(
+            ss1.as_bytes(),
+            ss2.as_bytes(),
+            "Shared secrets do not match!"
+        );
     }
 
     #[test]
@@ -54,8 +64,12 @@ mod tests {
         let signed_message = sign(message, &sk);
         let verified_message = verify(&signed_message, &pk).expect("Signature verification failed");
 
-        assert_eq!(message, verified_message.as_slice(), "Recovered message does not match original");
+        assert_eq!(
+            message,
+            verified_message.as_slice(),
+            "Recovered message does not match original"
+        );
     }
 }
-pub mod zkp;
 pub mod transaction;
+pub mod zkp;

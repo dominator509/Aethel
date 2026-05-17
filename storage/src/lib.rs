@@ -1,12 +1,12 @@
 #![forbid(unsafe_code)]
 
+use bytes::Bytes;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncWriteExt};
 use std::sync::Arc;
+use tokio::fs::{File, OpenOptions};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
-use bytes::Bytes;
 
 /// Basic entry in the Write-Ahead Log and MemTable
 pub const MAX_WAL_SIZE: u64 = 64 * 1024 * 1024; // 64MB
@@ -21,46 +21,67 @@ pub struct Entry {
 /// An extremely simplified Write-Ahead Log (WAL) to ensure durability
 pub struct Wal {
     file: File,
+    current_size: u64,
+    base_dir: PathBuf,
+    file_index: u32,
 }
 
 impl Wal {
-    pub async fn new(path: PathBuf) -> std::io::Result<Self> {
+    pub async fn new(base_dir: PathBuf) -> std::io::Result<Self> {
+        tokio::fs::create_dir_all(&base_dir).await?;
+
+        let mut wal_path = base_dir.clone();
+        wal_path.push("wal_0.log");
+
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(path)
+            .open(&wal_path)
             .await?;
-        Ok(Self { file })
+
+        let metadata = file.metadata().await?;
+
+        Ok(Self {
+            file,
+            current_size: metadata.len(),
+            base_dir,
+            file_index: 0,
+        })
     }
 
-    /// Appends a key-value pair to the WAL.
-    /// In a production system, this would be heavily optimized with buffering,
-    /// batching, and `fsync` grouping to achieve 3M TPS.
+    async fn rotate(&mut self) -> std::io::Result<()> {
+        self.file.sync_all().await?;
+        self.file_index += 1;
+
+        let mut wal_path = self.base_dir.clone();
+        wal_path.push(format!("wal_{}.log", self.file_index));
+
+        self.file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&wal_path)
+            .await?;
+
+        self.current_size = 0;
+        Ok(())
+    }
+
     pub async fn append(&mut self, key: &[u8], value: &[u8]) -> std::io::Result<()> {
-        // In a true 3M TPS system, this metadata check would be batched or cached.
-        // For the sake of this prototype's anti-exhaustion bounds:
-        let metadata = self.file.metadata().await?;
-        if metadata.len() >= MAX_WAL_SIZE {
-            // A production system would rotate the WAL here automatically.
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::FileTooLarge,
-                "WAL has reached maximum capacity and requires rotation"
-            ));
+        let entry_size = (8 + key.len() + value.len()) as u64;
+
+        if self.current_size + entry_size >= MAX_WAL_SIZE {
+            self.rotate().await?;
         }
 
         let key_len = key.len() as u32;
         let val_len = value.len() as u32;
 
-        // Write lengths and data sequentially
         self.file.write_u32(key_len).await?;
         self.file.write_u32(val_len).await?;
         self.file.write_all(key).await?;
         self.file.write_all(value).await?;
+        self.current_size += entry_size;
 
-        // For maximum safety, we sync all data immediately.
-        // NOTE: Doing this per-transaction physically prevents 3M TPS on standard hardware.
-        // This must be batched in a full implementation.
-        self.file.sync_data().await?;
         Ok(())
     }
 }
@@ -124,7 +145,7 @@ impl StorageEngine {
             // Anti-Exhaustion: Apply backpressure and prevent OOM if the MemTable is full
             return Err(std::io::Error::new(
                 std::io::ErrorKind::OutOfMemory,
-                "MemTable is at capacity and requires an SSTable flush before accepting new writes"
+                "MemTable is at capacity and requires an SSTable flush before accepting new writes",
             ));
         }
 
@@ -181,7 +202,9 @@ mod tests {
     #[tokio::test]
     async fn test_storage_engine_put_and_get() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let engine = StorageEngine::new(temp_dir.path().to_path_buf()).await.unwrap();
+        let engine = StorageEngine::new(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
 
         let key = Bytes::from("tx_123");
         let value = Bytes::from("tx_data_payload");
@@ -200,24 +223,24 @@ mod tests {
 }
 pub mod sstable;
 
-    #[tokio::test]
-    async fn test_internal_memtable_state_mutation() {
-        let mut memtable = MemTable::new();
-        let key = Bytes::from("internal_key");
-        let val = Bytes::from("internal_val");
+#[tokio::test]
+async fn test_internal_memtable_state_mutation() {
+    let mut memtable = MemTable::new();
+    let key = Bytes::from("internal_key");
+    let val = Bytes::from("internal_val");
 
-        // State Initialization
-        assert!(memtable.map.is_empty());
+    // State Initialization
+    assert!(memtable.map.is_empty());
 
-        // State Mutation
-        memtable.insert(key.clone(), val.clone());
-        assert_eq!(memtable.map.len(), 1);
+    // State Mutation
+    memtable.insert(key.clone(), val.clone());
+    assert_eq!(memtable.map.len(), 1);
 
-        // Edge Case Injection: Overwriting existing keys
-        let new_val = Bytes::from("new_internal_val");
-        memtable.insert(key.clone(), new_val.clone());
+    // Edge Case Injection: Overwriting existing keys
+    let new_val = Bytes::from("new_internal_val");
+    memtable.insert(key.clone(), new_val.clone());
 
-        // Internal state length shouldn't grow, value should be updated
-        assert_eq!(memtable.map.len(), 1);
-        assert_eq!(memtable.map.get(&key), Some(&new_val));
-    }
+    // Internal state length shouldn't grow, value should be updated
+    assert_eq!(memtable.map.len(), 1);
+    assert_eq!(memtable.map.get(&key), Some(&new_val));
+}

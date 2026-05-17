@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-use sha2::{Sha256, Digest};
 use crypto::transaction::Transaction;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
 /// Defines the number of shards in the Aethel network
@@ -21,6 +21,7 @@ pub struct Vertex {
     pub id: VertexId,
     pub creator: PeerId,
     pub shard_id: usize,
+    pub round: u64,
     pub transactions: Vec<TransactionId>,
     pub parents: Vec<VertexId>,
 }
@@ -82,7 +83,12 @@ impl Dag {
     }
 
     /// Proposes a new vertex to be added to the DAG
-    pub fn propose_vertex(&mut self, creator: PeerId, txs: Vec<TransactionId>, parents: Vec<VertexId>) -> Result<VertexId, &'static str> {
+    pub fn propose_vertex(
+        &mut self,
+        creator: PeerId,
+        txs: Vec<TransactionId>,
+        parents: Vec<VertexId>,
+    ) -> Result<VertexId, &'static str> {
         if txs.len() > MAX_TXS_PER_VERTEX {
             return Err("Too many transactions in vertex proposal");
         }
@@ -113,10 +119,21 @@ impl Dag {
         }
         let id = hasher.finalize().to_vec();
 
+        // Determine the round based on parents
+        let mut max_parent_round = 0;
+        for parent in &parents {
+            if let Some(parent_vertex) = self.vertices.get(parent) {
+                if parent_vertex.round > max_parent_round {
+                    max_parent_round = parent_vertex.round;
+                }
+            }
+        }
+
         let vertex = Vertex {
             id: id.clone(),
             creator,
             shard_id: self.shard_id,
+            round: max_parent_round + 1,
             transactions: txs.clone(),
             parents,
         };
@@ -133,6 +150,23 @@ impl Dag {
     }
 
     /// Lock a cross-shard transaction
+    /// Computes deterministic finality ordering of the DAG
+    /// This establishes a simple topological sort using round numbers and hashes for tie-breaking
+    pub fn compute_finality_and_order(&self) -> Vec<VertexId> {
+        let mut ordered_vertices: Vec<&Vertex> = self.vertices.values().collect();
+
+        // Sort primarily by round (causality), secondarily by ID (deterministic tie-break)
+        ordered_vertices.sort_by(|a, b| {
+            if a.round != b.round {
+                a.round.cmp(&b.round)
+            } else {
+                a.id.cmp(&b.id)
+            }
+        });
+
+        ordered_vertices.into_iter().map(|v| v.id.clone()).collect()
+    }
+
     pub fn lock_cross_shard_tx(&mut self, tx_id: TransactionId) {
         let locks = self.cross_shard_locks.entry(tx_id).or_default();
         locks.insert(self.shard_id);
@@ -195,79 +229,80 @@ mod tests {
     }
 }
 
+#[test]
+fn test_internal_cross_shard_locks_lifecycle() {
+    let mut dag = Dag::new(10);
+    let tx1 = vec![1, 2, 3];
+    let tx2 = vec![4, 5, 6];
 
+    // 1. Initialization
+    assert!(dag.cross_shard_locks.is_empty());
 
-    #[test]
-    fn test_internal_cross_shard_locks_lifecycle() {
-        let mut dag = Dag::new(10);
-        let tx1 = vec![1, 2, 3];
-        let tx2 = vec![4, 5, 6];
+    // 2. Mutation (Locking)
+    dag.lock_cross_shard_tx(tx1.clone());
+    dag.lock_cross_shard_tx(tx2.clone());
+    assert_eq!(dag.cross_shard_locks.len(), 2);
+    assert!(dag.cross_shard_locks.get(&tx1).unwrap().contains(&10));
 
-        // 1. Initialization
-        assert!(dag.cross_shard_locks.is_empty());
-
-        // 2. Mutation (Locking)
-        dag.lock_cross_shard_tx(tx1.clone());
-        dag.lock_cross_shard_tx(tx2.clone());
-        assert_eq!(dag.cross_shard_locks.len(), 2);
-        assert!(dag.cross_shard_locks.get(&tx1).unwrap().contains(&10));
-
-        // 3. Destruction (Proposing vertex should garbage collect the locks)
-        // Since propose_vertex validates mempool existence, we bypass it for a direct state unit test
-        // and manually invoke the internal state logic that propose_vertex performs on success
-        let txs = vec![tx1.clone()];
-        for tx in &txs {
-            dag.mempool.remove(tx);
-            dag.cross_shard_locks.remove(tx);
-        }
-
-        // Assert tx1 is destroyed, tx2 remains
-        assert_eq!(dag.cross_shard_locks.len(), 1);
-        assert!(!dag.cross_shard_locks.contains_key(&tx1));
-        assert!(dag.cross_shard_locks.contains_key(&tx2));
+    // 3. Destruction (Proposing vertex should garbage collect the locks)
+    // Since propose_vertex validates mempool existence, we bypass it for a direct state unit test
+    // and manually invoke the internal state logic that propose_vertex performs on success
+    let txs = vec![tx1.clone()];
+    for tx in &txs {
+        dag.mempool.remove(tx);
+        dag.cross_shard_locks.remove(tx);
     }
 
-    #[test]
-    fn test_branch_coverage_max_txs_per_vertex() {
-        let mut dag = Dag::new(1);
-        let creator = b"node_a".to_vec();
+    // Assert tx1 is destroyed, tx2 remains
+    assert_eq!(dag.cross_shard_locks.len(), 1);
+    assert!(!dag.cross_shard_locks.contains_key(&tx1));
+    assert!(dag.cross_shard_locks.contains_key(&tx2));
+}
 
-        // Exceed MAX_TXS_PER_VERTEX (10_000)
-        let mut txs = Vec::with_capacity(MAX_TXS_PER_VERTEX + 1);
-        for i in 0..=(MAX_TXS_PER_VERTEX) {
-            txs.push(vec![(i % 255) as u8]);
-        }
+#[test]
+fn test_branch_coverage_max_txs_per_vertex() {
+    let mut dag = Dag::new(1);
+    let creator = b"node_a".to_vec();
 
-        let result = dag.propose_vertex(creator, txs, vec![]);
-        assert!(result.is_err());
-        assert_eq!(result.err(), Some("Too many transactions in vertex proposal"));
+    // Exceed MAX_TXS_PER_VERTEX (10_000)
+    let mut txs = Vec::with_capacity(MAX_TXS_PER_VERTEX + 1);
+    for i in 0..=(MAX_TXS_PER_VERTEX) {
+        txs.push(vec![(i % 255) as u8]);
     }
 
-    #[test]
-    fn test_branch_coverage_max_parents_per_vertex() {
-        let mut dag = Dag::new(1);
-        let creator = b"node_a".to_vec();
-        let txs = vec![b"tx".to_vec()];
+    let result = dag.propose_vertex(creator, txs, vec![]);
+    assert!(result.is_err());
+    assert_eq!(
+        result.err(),
+        Some("Too many transactions in vertex proposal")
+    );
+}
 
-        // Exceed MAX_PARENTS_PER_VERTEX (10)
-        let mut parents = Vec::with_capacity(MAX_PARENTS_PER_VERTEX + 1);
-        for i in 0..=(MAX_PARENTS_PER_VERTEX) {
-            parents.push(vec![(i % 255) as u8]);
-        }
+#[test]
+fn test_branch_coverage_max_parents_per_vertex() {
+    let mut dag = Dag::new(1);
+    let creator = b"node_a".to_vec();
+    let txs = vec![b"tx".to_vec()];
 
-        let result = dag.propose_vertex(creator, txs, parents);
-        assert!(result.is_err());
-        assert_eq!(result.err(), Some("Too many parents in vertex proposal"));
+    // Exceed MAX_PARENTS_PER_VERTEX (10)
+    let mut parents = Vec::with_capacity(MAX_PARENTS_PER_VERTEX + 1);
+    for i in 0..=(MAX_PARENTS_PER_VERTEX) {
+        parents.push(vec![(i % 255) as u8]);
     }
 
-    #[test]
-    fn test_branch_coverage_missing_tx_in_mempool() {
-        let mut dag = Dag::new(1);
-        let creator = b"node_a".to_vec();
-        let missing_tx = b"ghost_tx".to_vec();
+    let result = dag.propose_vertex(creator, txs, parents);
+    assert!(result.is_err());
+    assert_eq!(result.err(), Some("Too many parents in vertex proposal"));
+}
 
-        // Propose vertex with a transaction not in the mempool
-        let result = dag.propose_vertex(creator, vec![missing_tx], vec![]);
-        assert!(result.is_err());
-        assert_eq!(result.err(), Some("Transaction not found in mempool"));
-    }
+#[test]
+fn test_branch_coverage_missing_tx_in_mempool() {
+    let mut dag = Dag::new(1);
+    let creator = b"node_a".to_vec();
+    let missing_tx = b"ghost_tx".to_vec();
+
+    // Propose vertex with a transaction not in the mempool
+    let result = dag.propose_vertex(creator, vec![missing_tx], vec![]);
+    assert!(result.is_err());
+    assert_eq!(result.err(), Some("Transaction not found in mempool"));
+}

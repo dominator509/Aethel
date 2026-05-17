@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProtocolState {
@@ -49,8 +49,12 @@ impl PartitionMonitor {
     }
 
     /// Autonomous protocol recovery sequence
-    pub fn execute_reboot_sequence(&mut self, proof_of_state_consistency: bool) -> Result<(), &'static str> {
-        if self.state != ProtocolState::PartitionDetected && self.state != ProtocolState::Hibernated {
+    pub fn execute_reboot_sequence(
+        &mut self,
+        proof_of_state_consistency: bool,
+    ) -> Result<(), &'static str> {
+        if self.state != ProtocolState::PartitionDetected && self.state != ProtocolState::Hibernated
+        {
             return Err("Cannot reboot unless partitioned or hibernated");
         }
 
