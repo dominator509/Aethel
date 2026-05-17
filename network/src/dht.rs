@@ -97,3 +97,29 @@ mod tests {
         assert!(closest.contains(&peer1));
     }
 }
+
+    #[test]
+    fn test_internal_exception_k_bucket_size_exhaustion() {
+        let local = b"node_a".to_vec();
+        let mut dht = RoutingTable::new(local);
+
+        // Fill bucket 0 to capacity
+        for i in 0..K_BUCKET_SIZE {
+            // By XOR math, a peer with the same first byte will map to distance 0 for the first byte
+            let mut peer = b"node_a".to_vec();
+            peer.push(i as u8); // make it unique
+            dht.add_peer(peer);
+        }
+
+        // Ensure bucket is at capacity
+        assert_eq!(dht.buckets.get(&0).unwrap().peers.len(), K_BUCKET_SIZE);
+
+        // Attempt to add one more
+        let mut overflow_peer = b"node_a".to_vec();
+        overflow_peer.push(255);
+        dht.add_peer(overflow_peer.clone());
+
+        // Verify bucket size has not exceeded K_BUCKET_SIZE
+        assert_eq!(dht.buckets.get(&0).unwrap().peers.len(), K_BUCKET_SIZE);
+        assert!(!dht.buckets.get(&0).unwrap().peers.contains(&overflow_peer));
+    }

@@ -197,3 +197,25 @@ mod tests {
     }
 }
 pub mod sstable;
+
+    #[tokio::test]
+    async fn test_internal_memtable_state_mutation() {
+        let mut memtable = MemTable::new();
+        let key = Bytes::from("internal_key");
+        let val = Bytes::from("internal_val");
+
+        // State Initialization
+        assert!(memtable.map.is_empty());
+
+        // State Mutation
+        memtable.insert(key.clone(), val.clone());
+        assert_eq!(memtable.map.len(), 1);
+
+        // Edge Case Injection: Overwriting existing keys
+        let new_val = Bytes::from("new_internal_val");
+        memtable.insert(key.clone(), new_val.clone());
+
+        // Internal state length shouldn't grow, value should be updated
+        assert_eq!(memtable.map.len(), 1);
+        assert_eq!(memtable.map.get(&key), Some(&new_val));
+    }

@@ -2,11 +2,12 @@
 
 use bytes::Bytes;
 use std::collections::BTreeMap;
-use tokio::fs::{File, OpenOptions};
+use tokio::fs::File;
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
 use std::path::PathBuf;
 
 /// An SSTable (Sorted String Table) represents immutable, flushed data on disk.
+#[derive(Debug)]
 pub struct SSTable {
     pub path: PathBuf,
 }
@@ -17,7 +18,7 @@ const MAX_KEYS_PER_COMPACTION: usize = 500_000;
 impl SSTable {
     /// Flushes an in-memory MemTable (BTreeMap) to an SSTable on disk.
     pub async fn flush_memtable(memtable: &BTreeMap<Bytes, Bytes>, path: PathBuf) -> std::io::Result<Self> {
-        let mut file = OpenOptions::new()
+        let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .truncate(true)
             .write(true)
@@ -111,5 +112,37 @@ mod tests {
 
         // At this point, the compacted file should contain a, b(3), and c.
         // We verify the compaction ran without errors.
+    }
+    #[tokio::test]
+    async fn test_internal_exception_max_allocation_size() {
+        use tempfile::NamedTempFile;
+        use tokio::io::AsyncWriteExt;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        // Construct a maliciously crafted SSTable file bypassing flush_memtable
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .await
+            .unwrap();
+
+        let malicious_key_len: u32 = MAX_ALLOCATION_SIZE + 1;
+        let val_len: u32 = 10;
+
+        file.write_u32(malicious_key_len).await.unwrap();
+        file.write_u32(val_len).await.unwrap();
+        // Don't actually write the data, we just want it to read the lengths and fail
+        file.sync_all().await.unwrap();
+
+        let table = SSTable { path };
+        let out_temp = NamedTempFile::new().unwrap();
+
+        // Attempt compaction. It should catch the malicious length and abort to prevent OOM
+        let result = SSTable::compact(&[table], out_temp.path().to_path_buf()).await;
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::InvalidData);
     }
 }

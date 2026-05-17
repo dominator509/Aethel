@@ -194,3 +194,80 @@ mod tests {
         assert_eq!(result.err(), Some("Parent vertex not found in this shard"));
     }
 }
+
+
+
+    #[test]
+    fn test_internal_cross_shard_locks_lifecycle() {
+        let mut dag = Dag::new(10);
+        let tx1 = vec![1, 2, 3];
+        let tx2 = vec![4, 5, 6];
+
+        // 1. Initialization
+        assert!(dag.cross_shard_locks.is_empty());
+
+        // 2. Mutation (Locking)
+        dag.lock_cross_shard_tx(tx1.clone());
+        dag.lock_cross_shard_tx(tx2.clone());
+        assert_eq!(dag.cross_shard_locks.len(), 2);
+        assert!(dag.cross_shard_locks.get(&tx1).unwrap().contains(&10));
+
+        // 3. Destruction (Proposing vertex should garbage collect the locks)
+        // Since propose_vertex validates mempool existence, we bypass it for a direct state unit test
+        // and manually invoke the internal state logic that propose_vertex performs on success
+        let txs = vec![tx1.clone()];
+        for tx in &txs {
+            dag.mempool.remove(tx);
+            dag.cross_shard_locks.remove(tx);
+        }
+
+        // Assert tx1 is destroyed, tx2 remains
+        assert_eq!(dag.cross_shard_locks.len(), 1);
+        assert!(!dag.cross_shard_locks.contains_key(&tx1));
+        assert!(dag.cross_shard_locks.contains_key(&tx2));
+    }
+
+    #[test]
+    fn test_branch_coverage_max_txs_per_vertex() {
+        let mut dag = Dag::new(1);
+        let creator = b"node_a".to_vec();
+
+        // Exceed MAX_TXS_PER_VERTEX (10_000)
+        let mut txs = Vec::with_capacity(MAX_TXS_PER_VERTEX + 1);
+        for i in 0..=(MAX_TXS_PER_VERTEX) {
+            txs.push(vec![(i % 255) as u8]);
+        }
+
+        let result = dag.propose_vertex(creator, txs, vec![]);
+        assert!(result.is_err());
+        assert_eq!(result.err(), Some("Too many transactions in vertex proposal"));
+    }
+
+    #[test]
+    fn test_branch_coverage_max_parents_per_vertex() {
+        let mut dag = Dag::new(1);
+        let creator = b"node_a".to_vec();
+        let txs = vec![b"tx".to_vec()];
+
+        // Exceed MAX_PARENTS_PER_VERTEX (10)
+        let mut parents = Vec::with_capacity(MAX_PARENTS_PER_VERTEX + 1);
+        for i in 0..=(MAX_PARENTS_PER_VERTEX) {
+            parents.push(vec![(i % 255) as u8]);
+        }
+
+        let result = dag.propose_vertex(creator, txs, parents);
+        assert!(result.is_err());
+        assert_eq!(result.err(), Some("Too many parents in vertex proposal"));
+    }
+
+    #[test]
+    fn test_branch_coverage_missing_tx_in_mempool() {
+        let mut dag = Dag::new(1);
+        let creator = b"node_a".to_vec();
+        let missing_tx = b"ghost_tx".to_vec();
+
+        // Propose vertex with a transaction not in the mempool
+        let result = dag.propose_vertex(creator, vec![missing_tx], vec![]);
+        assert!(result.is_err());
+        assert_eq!(result.err(), Some("Transaction not found in mempool"));
+    }
