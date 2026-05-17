@@ -97,7 +97,13 @@ pub struct StorageEngine {
 }
 
 impl StorageEngine {
-    pub async fn new(wal_path: PathBuf) -> std::io::Result<Self> {
+    pub async fn new(base_dir: PathBuf) -> std::io::Result<Self> {
+        // Create the base directory if it doesn't exist
+        tokio::fs::create_dir_all(&base_dir).await?;
+
+        let mut wal_path = base_dir.clone();
+        wal_path.push("wal.log");
+
         let wal = Wal::new(wal_path).await?;
         let memtable = MemTable::new();
 
@@ -135,17 +141,45 @@ impl StorageEngine {
         let memtable = self.memtable.read().await;
         memtable.get(key)
     }
+
+    /// Safely flushes the current MemTable to an SSTable on disk and clears it.
+    pub async fn flush_to_disk(&self, base_dir: &std::path::Path) -> std::io::Result<()> {
+        let mut sstable_dir = base_dir.to_path_buf();
+        sstable_dir.push("sstables");
+        tokio::fs::create_dir_all(&sstable_dir).await?;
+        let mut memtable = self.memtable.write().await;
+
+        if memtable.map.is_empty() {
+            return Ok(());
+        }
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let mut path = sstable_dir.to_path_buf();
+        path.push(format!("sstable_{}.sst", timestamp));
+
+        // Flush using the SSTable module logic
+        sstable::SSTable::flush_memtable(&memtable.map, path).await?;
+
+        // Clear the in-memory map to free capacity
+        memtable.map.clear();
+
+        // In a full implementation, you would also truncate/cycle the WAL here
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
 
     #[tokio::test]
     async fn test_storage_engine_put_and_get() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let engine = StorageEngine::new(temp_file.path().to_path_buf()).await.unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let engine = StorageEngine::new(temp_dir.path().to_path_buf()).await.unwrap();
 
         let key = Bytes::from("tx_123");
         let value = Bytes::from("tx_data_payload");

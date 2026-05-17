@@ -34,7 +34,7 @@ pub struct AethelNode {
 
 impl AethelNode {
     /// Bootstraps a new Aethel Node
-    pub async fn bootstrap(bind_addr: SocketAddr, storage_path: PathBuf) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
+    pub async fn bootstrap(bind_addr: SocketAddr, base_dir: PathBuf) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
         // 1. Initialize Cryptographic Identity (PQC)
         let kyber_keys = generate_mlkem_keypair();
         let dilithium_keys = generate_mldsa_keypair();
@@ -43,7 +43,7 @@ impl AethelNode {
         let network = Arc::new(NetworkNode::new(bind_addr)?);
 
         // 3. Initialize Storage (LSM-Tree)
-        let storage = Arc::new(StorageEngine::new(storage_path).await?);
+        let storage = Arc::new(StorageEngine::new(base_dir.clone()).await?);
 
         // 4. Initialize Consensus (Sharded DAG)
         let mut shards = Vec::with_capacity(consensus::NUM_SHARDS);
@@ -60,7 +60,10 @@ impl AethelNode {
             dags,
         });
 
-        // 5. Start background transaction listener loop
+        // 5. Start background storage maintenance loop
+        node.start_storage_maintenance(base_dir.clone());
+
+        // 6. Start background transaction listener loop
         node.start_transaction_listener().await;
 
         Ok(node)
@@ -84,12 +87,30 @@ impl AethelNode {
                 let tx_key = Bytes::from(sha2::Sha256::digest(&tx_bytes).to_vec());
                 let tx_val = Bytes::from(tx_bytes);
 
-                let _ = storage.put(tx_key.clone(), tx_val).await;
+                if let Err(e) = storage.put(tx_key.clone(), tx_val).await {
+                    eprintln!("WARNING: Failed to persist transaction (Backpressure/Error): {}", e);
+                }
 
                 // 2. In a real system, we'd pass the deserialized `Transaction` to:
                 // let shard_id = Dag::hash_to_shard(&tx.id);
                 // let mut all_dags = dags.write().await;
                 // let _ = all_dags[shard_id].validate_and_add_tx(tx);
+            }
+        });
+    }
+
+    /// Spawns a background task to periodically flush the MemTable to disk
+    fn start_storage_maintenance(self: &Arc<Self>, storage_dir: PathBuf) {
+        let storage = self.storage.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            loop {
+                interval.tick().await;
+                // Flush the MemTable every 10 seconds to prevent OOM deadlocks
+                if let Err(e) = storage.flush_to_disk(&storage_dir).await {
+                    eprintln!("CRITICAL: Failed to flush MemTable to disk: {}", e);
+                }
             }
         });
     }
@@ -99,14 +120,13 @@ impl AethelNode {
 mod tests {
     use super::*;
     use std::net::{Ipv4Addr, SocketAddrV4};
-    use tempfile::NamedTempFile;
 
     #[tokio::test]
     async fn test_node_bootstrap() {
         let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0));
-        let temp_file = NamedTempFile::new().unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
 
-        let node_result = AethelNode::bootstrap(addr, temp_file.path().to_path_buf()).await;
+        let node_result = AethelNode::bootstrap(addr, temp_dir.path().to_path_buf()).await;
 
         assert!(node_result.is_ok(), "Failed to bootstrap Aethel Node");
 
