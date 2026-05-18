@@ -12,3 +12,4 @@ bytes = "1.1"
 [dev-dependencies]
 crypto = { path = "../crypto" }
 tokio = { version = "1", features = ["full"] }
+bincode = "1.3"
