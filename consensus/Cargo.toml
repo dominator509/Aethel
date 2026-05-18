@@ -6,3 +6,8 @@ edition = "2021"
 [dependencies]
 crypto = { version = "0.1.0", path = "../crypto" }
 sha2 = "0.11.0"
+pqcrypto-mldsa = "0.1"
+bytes = "1.1"
+
+[dev-dependencies]
+crypto = { path = "../crypto" }
