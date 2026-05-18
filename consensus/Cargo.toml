@@ -1,0 +1,9 @@
+[package]
+name = "consensus"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sha2 = "0.10"
+crypto = { path = "../crypto" }
+storage = { path = "../storage" }

@@ -1,0 +1,11 @@
+[package]
+name = "core_node"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crypto = { path = "../crypto" }
+network = { path = "../network" }
+storage = { path = "../storage" }
+consensus = { path = "../consensus" }
+tokio = { version = "1.0", features = ["full"] }
