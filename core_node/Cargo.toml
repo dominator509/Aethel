@@ -4,8 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-crypto = { path = "../crypto" }
-network = { path = "../network" }
-storage = { path = "../storage" }
-consensus = { path = "../consensus" }
+bincode = "1.3.3"
+bytes = "1.11.1"
+consensus = { version = "0.1.0", path = "../consensus" }
+crypto = { version = "0.1.0", path = "../crypto" }
+network = { version = "0.1.0", path = "../network" }
+sha2 = "0.10"
+storage = { version = "0.1.0", path = "../storage" }
 tokio = { version = "1.0", features = ["full"] }
+pqcrypto-kyber = { version = "0.8", features = ["serialization"] }
+pqcrypto-dilithium = { version = "0.5", features = ["serialization"] }
+
+[dev-dependencies]
+quinn = "0.11"
+rcgen = "0.13"
+rustls = "0.23"
+tempfile = "3.27.0"

@@ -1,3 +1,12 @@
+use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
+use bytes::Bytes;
+use tokio::fs::{File, OpenOptions};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use serde::{Serialize, Deserialize};
+
 /// Strict storage limits to prevent OOM deadlocks during extreme workload spikes.
 
 // 64 MB
@@ -27,5 +36,101 @@ impl Default for StorageEngineConfig {
             max_compaction_keys: MAX_COMPACTION_KEYS,
             max_allocation_size_bytes: MAX_ALLOCATION_SIZE_BYTES,
         }
+    }
+}
+
+pub mod sstable;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Operation {
+    pub key: Bytes,
+    pub value: Option<Bytes>,
+    pub timestamp: u64,
+}
+
+pub struct LSMTree {
+    memtable: Arc<RwLock<BTreeMap<Bytes, Operation>>>,
+    wal_file: Arc<Mutex<File>>,
+    config: StorageEngineConfig,
+    data_dir: PathBuf,
+}
+
+impl LSMTree {
+    pub async fn new(data_dir: PathBuf, config: StorageEngineConfig) -> std::io::Result<Self> {
+        let wal_path = data_dir.join("wal.log");
+        let wal_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&wal_path)
+            .await?;
+
+        Ok(Self {
+            memtable: Arc::new(RwLock::new(BTreeMap::new())),
+            wal_file: Arc::new(Mutex::new(wal_file)),
+            config,
+            data_dir,
+        })
+    }
+
+    pub async fn put(&self, key: Bytes, value: Bytes, timestamp: u64) -> std::io::Result<()> {
+        let op = Operation {
+            key: key.clone(),
+            value: Some(value),
+            timestamp,
+        };
+
+        // Write to WAL
+        let op_bytes = bincode::serialize(&op).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let mut wal = self.wal_file.lock().await;
+        wal.write_all(&(op_bytes.len() as u32).to_le_bytes()).await?;
+        wal.write_all(&op_bytes).await?;
+        wal.flush().await?;
+        drop(wal);
+
+        // Write to MemTable
+        let mut memtable = self.memtable.write().await;
+        memtable.insert(key, op);
+
+        if memtable.len() >= self.config.max_memtable_size {
+            // Initiate flush
+            // In a real implementation, this would spawn a background task
+            self.flush_memtable(&mut memtable).await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn get(&self, key: &Bytes) -> std::io::Result<Option<Bytes>> {
+        let memtable = self.memtable.read().await;
+        if let Some(op) = memtable.get(key) {
+            return Ok(op.value.clone());
+        }
+
+        // In a real implementation, search SSTables here
+        Ok(None)
+    }
+
+    async fn flush_memtable(&self, memtable: &mut BTreeMap<Bytes, Operation>) -> std::io::Result<()> {
+        if memtable.is_empty() {
+            return Ok(());
+        }
+
+        // 1. Create SSTable from memtable
+        // 2. Clear memtable
+        memtable.clear();
+
+        // 3. Truncate WAL
+        let wal_path = self.data_dir.join("wal.log");
+        let new_wal = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&wal_path)
+            .await?;
+
+        let mut wal = self.wal_file.lock().await;
+        *wal = new_wal;
+
+        Ok(())
     }
 }
