@@ -18,6 +18,7 @@ Based on the exhaustive analysis of all system reports across security, sanity, 
 ---
 
 ## 2. Developer Experience (DX) & Usability Friction
+n*Note: Implementation of heavy REST/gRPC APIs was rejected to preserve URLLC performance. See EXPLANATIONS_AND_REJECTIONS.md*
 **The Problem:** The system is "fundamentally hostile to integration." Clients interacting with the raw socket receive silent closures (TCP FIN/RST) on timeouts instead of actionable error payloads. There is no CLI or GUI.
 **The Fixes:**
 - [ ] **Implement an RPC/API Layer:** Build a structured API (e.g., gRPC, GraphQL, or a RESTful wrapper) on top of the network layer.
@@ -27,6 +28,7 @@ Based on the exhaustive analysis of all system reports across security, sanity, 
 ---
 
 ## 3. Security & Access Control Hardening
+n*Note: SPIFFE/SPIRE mTLS mesh was rejected to avoid IPC proxy latency. See EXPLANATIONS_AND_REJECTIONS.md*
 **The Problem:** The `SECURITY_AUDIT_REPORT.md` notes that while the core protocol logic gracefully handles failures and drops malicious inputs via `ErrorKind::InvalidData`, the cluster lacks robust identity management. The report explicitly warns of high exploitability for unknown zero-days in experimental crypto libraries, and states: "The node relies on raw QUIC certs."
 **The Fixes:**
 - [ ] **mTLS SPIFFE/SPIRE Mesh:** Transition internal node RPC clustering from raw self-signed QUIC certificates to a full mTLS SPIFFE/SPIRE identity mesh for authenticated peer-to-peer routing.

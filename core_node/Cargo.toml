@@ -14,6 +14,9 @@ storage = { version = "0.1.0", path = "../storage" }
 tokio = { version = "1.0", features = ["full"] }
 pqcrypto-kyber = { version = "0.8", features = ["serialization"] }
 pqcrypto-dilithium = { version = "0.5", features = ["serialization"] }
+clap = { version = "4.4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [dev-dependencies]
 quinn = "0.11"
