@@ -1,0 +1,16 @@
+[package]
+name = "crypto"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pqcrypto-kyber = { version = "0.8", features = ["serialization"] }
+pqcrypto-dilithium = { version = "0.5", features = ["serialization"] }
+bulletproofs = "4.0.0"
+pqcrypto-traits = "0.3.5"
+rand = "0.8.5"
+curve25519-dalek-ng = { version = "4.1", features = ["serde"] }
+merlin = "3.0.0"
+rand_core = "0.6.4"
+sha2 = "0.10.0"
+serde = { version = "1.0", features = ["derive"] }
