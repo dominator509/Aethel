@@ -10,23 +10,23 @@ use tokio::sync::RwLock;
 use consensus::Dag;
 use crypto::{generate_mldsa_keypair, generate_mlkem_keypair};
 use network::Node as NetworkNode;
-use pqcrypto_dilithium::dilithium5;
-use pqcrypto_kyber::kyber1024;
-use storage::LSMTree;
+use pqcrypto_mldsa::mldsa87;
+use pqcrypto_mlkem::mlkem1024;
+use storage::StorageEngine;
 
 pub mod recovery;
 
 /// The Core Aethel Node integrating all Phase sub-components.
 pub struct AethelNode {
     /// Post-Quantum identity and encryption keys
-    pub kyber_keys: (kyber1024::PublicKey, kyber1024::SecretKey),
-    pub dilithium_keys: (dilithium5::PublicKey, dilithium5::SecretKey),
+    pub kyber_keys: (mlkem1024::PublicKey, mlkem1024::SecretKey),
+    pub dilithium_keys: (mldsa87::PublicKey, mldsa87::SecretKey),
 
     /// QUIC Transport layer
     pub network: Arc<NetworkNode>,
 
     /// LSM-Tree Storage Engine
-    pub storage: Arc<LSMTree>,
+    pub storage: Arc<StorageEngine>,
 
     /// The Sharded DAG Consensus states (one for each shard)
     pub dags: Arc<RwLock<Vec<Dag>>>,
@@ -46,7 +46,7 @@ impl AethelNode {
         let network = Arc::new(NetworkNode::new(bind_addr)?);
 
         // 3. Initialize Storage (LSM-Tree)
-        let storage = Arc::new(LSMTree::new(base_dir.clone(), storage::StorageEngineConfig::default()).await?);
+        let storage = Arc::new(StorageEngine::new(base_dir.clone()).await?);
 
         // 4. Initialize Consensus (Sharded DAG)
         let mut shards = Vec::with_capacity(consensus::NUM_SHARDS);
@@ -93,7 +93,7 @@ impl AethelNode {
                 let tx_key = Bytes::from(sha2::Sha256::digest(&tx_bytes).to_vec());
                 let tx_val = Bytes::from(tx_bytes);
 
-                if let Err(e) = storage.put(tx_key.clone(), tx_val, 0).await {
+                if let Err(e) = storage.put(tx_key.clone(), tx_val).await {
                     eprintln!(
                         "WARNING: Failed to persist transaction (Backpressure/Error): {}",
                         e
@@ -135,7 +135,7 @@ impl AethelNode {
             loop {
                 interval.tick().await;
                 // Flush the MemTable every 10 seconds to prevent OOM deadlocks
-                if let Err(e) = Ok::<(), std::io::Error>(()) {
+                if let Err(e) = storage.flush_to_disk(&storage_dir).await {
                     eprintln!("CRITICAL: Failed to flush MemTable to disk: {}", e);
                 }
             }

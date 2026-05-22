@@ -1,12 +1,12 @@
 use consensus::Dag;
 use crypto::transaction::Transaction;
 use crypto::zkp::ZkTransactionAmount;
-use pqcrypto_dilithium::dilithium5;
+use pqcrypto_mldsa::mldsa87;
 
 #[test]
 fn test_regression_v2_dag_parent_bounds_immutability() {
-    let (pk_sender, sk_sender) = dilithium5::keypair();
-    let (pk_receiver, _sk_receiver) = dilithium5::keypair();
+    let (pk_sender, sk_sender) = mldsa87::keypair();
+    let (pk_receiver, _sk_receiver) = mldsa87::keypair();
 
     let (amount_proof, _bf) = ZkTransactionAmount::create_proof(100).unwrap();
     let mut tx = Transaction::new(pk_sender, pk_receiver, amount_proof);

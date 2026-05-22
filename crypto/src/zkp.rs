@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 use bulletproofs::{BulletproofGens, PedersenGens, RangeProof};
-use curve25519_dalek_ng::ristretto::CompressedRistretto;
-use curve25519_dalek_ng::scalar::Scalar;
+use curve25519_dalek::ristretto::CompressedRistretto;
+use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
 /// A Zero-Knowledge Range Proof representing a hidden transaction amount

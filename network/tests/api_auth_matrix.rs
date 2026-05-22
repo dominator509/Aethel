@@ -1,12 +1,12 @@
 use bincode;
 use crypto::transaction::Transaction;
 use crypto::zkp::ZkTransactionAmount;
-use pqcrypto_dilithium::dilithium5;
+use pqcrypto_mldsa::mldsa87;
 
 #[test]
 fn test_api_auth_bincode_deserialization_tampering() {
-    let (pk_sender, sk_sender) = dilithium5::keypair();
-    let (pk_receiver, _sk_receiver) = dilithium5::keypair();
+    let (pk_sender, sk_sender) = mldsa87::keypair();
+    let (pk_receiver, _sk_receiver) = mldsa87::keypair();
 
     let (amount_proof, _blinding_factor) = ZkTransactionAmount::create_proof(100).unwrap();
     let mut tx = Transaction::new(pk_sender, pk_receiver, amount_proof);

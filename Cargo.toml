@@ -1,9 +1,5 @@
 [workspace]
-members = [
-    "crypto",
-    "network",
-    "storage",
-    "consensus",
-    "core_node",
-]
+members = ["consensus", "core_node",
+    "crypto"
+, "network", "storage"]
 resolver = "2"

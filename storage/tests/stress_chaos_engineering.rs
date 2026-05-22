@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use storage::sstable::SSTable;
-use storage::LSMTree;
+use storage::StorageEngine;
 use tempfile::NamedTempFile;
 
 #[tokio::test]
@@ -8,12 +8,12 @@ async fn test_chaos_engineering_disk_exhaustion_during_compaction() {
     let temp_dir = tempfile::tempdir().unwrap();
     let db_path = temp_dir.path().to_path_buf();
 
-    let storage = LSMTree::new(db_path.clone(), storage::StorageEngineConfig::default()).await.unwrap();
+    let storage = StorageEngine::new(db_path.clone()).await.unwrap();
 
     for i in 0..10_000 {
         let key = Bytes::from(format!("chaos_key_{}", i));
         let val = Bytes::from(format!("chaos_val_{}", i));
-        storage.put(key, val, 0).await.unwrap();
+        storage.put(key, val).await.unwrap();
     }
 
     // We can't explicitly flush the API but we can cause chaos during manual compaction

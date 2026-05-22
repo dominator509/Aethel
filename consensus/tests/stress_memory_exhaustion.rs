@@ -1,15 +1,15 @@
 use consensus::Dag;
 use crypto::transaction::Transaction;
 use crypto::zkp::ZkTransactionAmount;
-use pqcrypto_dilithium::dilithium5;
+use pqcrypto_mldsa::mldsa87;
 use std::time::Instant;
 
 #[test]
 fn test_stress_mempool_ram_exhaustion() {
     let mut dag = Dag::new(0);
 
-    let (pk_sender, sk_sender) = dilithium5::keypair();
-    let (pk_receiver, _) = dilithium5::keypair();
+    let (pk_sender, sk_sender) = mldsa87::keypair();
+    let (pk_receiver, _) = mldsa87::keypair();
 
     let start = Instant::now();
     let stress_limit = 2_000usize; // A limit large enough to test allocations, small enough for GitHub actions bounds.

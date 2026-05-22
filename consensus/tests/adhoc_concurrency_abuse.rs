@@ -1,14 +1,14 @@
 use consensus::Dag;
 use crypto::transaction::Transaction;
 use crypto::zkp::ZkTransactionAmount;
-use pqcrypto_dilithium::dilithium5;
+use pqcrypto_mldsa::mldsa87;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 #[test]
 fn test_adhoc_concurrency_state_disruption() {
-    let (pk_sender, sk_sender) = dilithium5::keypair();
-    let (pk_receiver, _) = dilithium5::keypair();
+    let (pk_sender, sk_sender) = mldsa87::keypair();
+    let (pk_receiver, _) = mldsa87::keypair();
 
     let mut transactions_to_add = vec![];
     for _ in 0..10 {

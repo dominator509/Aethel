@@ -1,12 +1,12 @@
 use consensus::Dag;
 use crypto::transaction::Transaction;
 use crypto::zkp::ZkTransactionAmount;
-use pqcrypto_dilithium::dilithium5;
+use pqcrypto_mldsa::mldsa87;
 
 #[test]
 fn test_adhoc_mutation_truncated_crypto() {
-    let (pk_sender, sk_sender) = dilithium5::keypair();
-    let (pk_receiver, _) = dilithium5::keypair();
+    let (pk_sender, sk_sender) = mldsa87::keypair();
+    let (pk_receiver, _) = mldsa87::keypair();
 
     // Create a real proof to satisfy the struct bounds natively without deep mock bypassing
     let (amount_proof, _) = ZkTransactionAmount::create_proof(100).unwrap();

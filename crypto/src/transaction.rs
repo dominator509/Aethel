@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::zkp::ZkTransactionAmount;
-use pqcrypto_dilithium::dilithium5;
+use pqcrypto_mldsa::mldsa87;
 use pqcrypto_traits::sign::PublicKey;
 use sha2::{Digest, Sha256};
 
@@ -11,20 +11,20 @@ pub struct Transaction {
     /// SHA256 hash of the transaction body
     pub id: Vec<u8>,
     /// Sender's Dilithium Public Key
-    pub sender: dilithium5::PublicKey,
+    pub sender: mldsa87::PublicKey,
     /// Receiver's Dilithium Public Key
-    pub receiver: dilithium5::PublicKey,
+    pub receiver: mldsa87::PublicKey,
     /// Zero-Knowledge proof of the transaction amount
     pub amount_proof: ZkTransactionAmount,
     /// Dilithium signature over the transaction hash
-    pub signature: Option<dilithium5::SignedMessage>,
+    pub signature: Option<mldsa87::SignedMessage>,
 }
 
 impl Transaction {
     /// Creates a new, unsigned transaction
     pub fn new(
-        sender: dilithium5::PublicKey,
-        receiver: dilithium5::PublicKey,
+        sender: mldsa87::PublicKey,
+        receiver: mldsa87::PublicKey,
         amount_proof: ZkTransactionAmount,
     ) -> Self {
         let mut tx = Self {
@@ -52,8 +52,8 @@ impl Transaction {
     }
 
     /// Signs the transaction using the sender's private key
-    pub fn sign(&mut self, sk: &dilithium5::SecretKey) {
-        let sig = dilithium5::sign(&self.id, sk);
+    pub fn sign(&mut self, sk: &mldsa87::SecretKey) {
+        let sig = mldsa87::sign(&self.id, sk);
         self.signature = Some(sig);
     }
 
@@ -68,7 +68,7 @@ impl Transaction {
 
         // 2. Verify Signature
         if let Some(sig) = &self.signature {
-            match dilithium5::open(sig, &self.sender) {
+            match mldsa87::open(sig, &self.sender) {
                 Ok(recovered_hash) => recovered_hash == self.id,
                 Err(_) => false,
             }
@@ -85,8 +85,8 @@ mod tests {
 
     #[test]
     fn test_transaction_lifecycle() {
-        let (sender_pk, sender_sk) = dilithium5::keypair();
-        let (receiver_pk, _) = dilithium5::keypair();
+        let (sender_pk, sender_sk) = mldsa87::keypair();
+        let (receiver_pk, _) = mldsa87::keypair();
 
         // Generate valid ZKP for amount 100
         let (zkp, _) = ZkTransactionAmount::create_proof(100).unwrap();

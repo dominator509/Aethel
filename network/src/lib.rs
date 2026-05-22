@@ -1,51 +1,47 @@
-use quinn::{
-    ClientConfig, Connection, Endpoint, ServerConfig,
-};
-use quinn_proto::crypto::rustls::{QuicClientConfig, QuicServerConfig};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+#![forbid(unsafe_code)]
+
+use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
+use quinn::{ClientConfig, Endpoint, ServerConfig};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::aws_lc_rs::default_provider;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use sha2::{Digest, Sha256};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use sha2::{Sha256, Digest};
-use tokio::sync::RwLock;
+use tokio::time::{timeout, Duration};
 
-mod dht;
-pub use dht::RoutingTable;
+pub mod dht;
 
-use std::collections::HashMap;
-use std::sync::Mutex;
-
-use rustls::crypto::aws_lc_rs::default_provider;
-use rustls::server::WebPkiClientVerifier;
-
-// Re-exports
-pub use quinn::RecvStream;
-
-// Mock implementation of a simple verifier that only accepts the peer id hash
 #[derive(Debug)]
-pub struct PeerIdVerifier {
+struct PeerIdVerifier {
     expected_peer_id: Vec<u8>,
 }
 
 impl PeerIdVerifier {
-    pub fn new(expected_peer_id: Vec<u8>) -> Arc<Self> {
+    fn new(expected_peer_id: Vec<u8>) -> Arc<Self> {
         Arc::new(Self { expected_peer_id })
     }
 }
 
-impl rustls::client::danger::ServerCertVerifier for PeerIdVerifier {
+impl ServerCertVerifier for PeerIdVerifier {
     fn verify_server_cert(
         &self,
         end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
-        _server_name: &rustls::pki_types::ServerName<'_>,
+        _server_name: &ServerName<'_>,
         _ocsp_response: &[u8],
         _now: rustls::pki_types::UnixTime,
-    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        let actual_peer_id = derive_peer_id(end_entity);
-        if actual_peer_id == self.expected_peer_id {
-            Ok(rustls::client::danger::ServerCertVerified::assertion())
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        let mut hasher = Sha256::new();
+        hasher.update(end_entity.as_ref());
+        let cert_hash = hasher.finalize().to_vec();
+
+        if cert_hash == self.expected_peer_id {
+            Ok(ServerCertVerified::assertion())
         } else {
-            Err(rustls::Error::General("Peer ID mismatch".to_string()))
+            Err(rustls::Error::General(
+                "Peer ID mismatch! MITM attack suspected.".to_string(),
+            ))
         }
     }
 
@@ -54,33 +50,37 @@ impl rustls::client::danger::ServerCertVerifier for PeerIdVerifier {
         _message: &[u8],
         _cert: &CertificateDer<'_>,
         _dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Err(rustls::Error::General("TLS 1.2 not supported".to_string()))
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
     }
 
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::aws_lc_rs::default_provider()
-            .signature_verification_algorithms
-            .verify_tls13_signature(message, cert, dss)
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        rustls::crypto::aws_lc_rs::default_provider()
-            .signature_verification_algorithms
-            .supported_schemes()
+        vec![
+            rustls::SignatureScheme::RSA_PKCS1_SHA256,
+            rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+            rustls::SignatureScheme::ECDSA_NISTP384_SHA384,
+            rustls::SignatureScheme::ED25519,
+        ]
     }
 }
 
+pub fn generate_self_signed_cert(
+) -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>), Box<dyn std::error::Error>> {
+    let subject_alt_names = vec!["aethel.network".to_string(), "localhost".to_string()];
+    let cert = rcgen::generate_simple_self_signed(subject_alt_names)?;
 
-pub fn generate_self_signed_cert() -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>), Box<dyn std::error::Error>> {
-    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
-    let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(cert.serialize_private_key_der()));
-    let cert_der = CertificateDer::from(cert.serialize_der()?);
+    let key = PrivateKeyDer::try_from(cert.key_pair.serialize_der())?;
+    let cert_der = CertificateDer::from(cert.cert.der().to_vec());
+
     Ok((cert_der, key))
 }
 
@@ -90,12 +90,13 @@ pub fn derive_peer_id(cert: &CertificateDer<'_>) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
+use crate::dht::RoutingTable;
+use tokio::sync::RwLock;
 
 pub struct Node {
     pub endpoint: Endpoint,
     pub cert: CertificateDer<'static>,
     pub dht: Arc<RwLock<RoutingTable>>,
-    pub client_configs: Arc<Mutex<HashMap<Vec<u8>, ClientConfig>>>,
 }
 
 impl Node {
@@ -125,7 +126,6 @@ impl Node {
             endpoint,
             cert: cert_clone,
             dht,
-            client_configs: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -142,42 +142,99 @@ impl Node {
     }
 
     pub async fn broadcast_transaction(&self, tx_bytes: &[u8], peers: &[(SocketAddr, Vec<u8>)]) {
-        // Pre-fetch or generate ClientConfigs
-        let mut configs_to_use = Vec::with_capacity(peers.len());
         for (addr, expected_peer_id) in peers {
-            let config = {
-                let cache = self.client_configs.lock().unwrap();
-                cache.get(expected_peer_id).cloned()
-            };
-
-            let client_config = match config {
-                Some(c) => c,
-                None => {
-                    let new_config = Self::make_client_config(expected_peer_id.clone());
-                    self.client_configs
-                        .lock()
-                        .unwrap()
-                        .insert(expected_peer_id.clone(), new_config.clone());
-                    new_config
-                }
-            };
-            configs_to_use.push((*addr, client_config));
-        }
-
-        for (addr_clone, client_config) in configs_to_use {
             let endpoint = self.endpoint.clone();
-            let tx_clone = tx_bytes.to_vec();
+            let client_config = Self::make_client_config(expected_peer_id.clone());
+            let addr_clone = *addr;
+            let tx_bytes_clone = tx_bytes.to_vec();
 
             tokio::spawn(async move {
-                if let Ok(conn) = endpoint.connect_with(client_config, addr_clone, "localhost") {
-                    if let Ok(connection) = conn.await {
-                        if let Ok(mut send) = connection.open_uni().await {
-                            let _ = send.write_all(&tx_clone).await;
-                            let _ = send.finish();
+                // Anti-Blocking: Ensure a slow peer doesn't hang the broadcast task
+                let _ = timeout(Duration::from_secs(3), async {
+                    if let Ok(conn) =
+                        endpoint.connect_with(client_config, addr_clone, "aethel.network")
+                    {
+                        if let Ok(connection) = conn.await {
+                            if let Ok(mut stream) = connection.open_uni().await {
+                                let _ = stream.write_all(&tx_bytes_clone).await;
+                            }
                         }
                     }
-                }
+                })
+                .await;
             });
         }
+    }
+
+    pub async fn listen_for_transactions(&self) -> tokio::sync::mpsc::Receiver<Vec<u8>> {
+        let (tx, rx) = tokio::sync::mpsc::channel(1024);
+        let endpoint_clone = self.endpoint.clone();
+
+        let dht_clone = self.dht.clone();
+        tokio::spawn(async move {
+            // Anti-DoS: Hard limit on active incoming connections
+            let connection_semaphore = Arc::new(tokio::sync::Semaphore::new(10_000));
+
+            while let Some(incoming) = endpoint_clone.accept().await {
+                if let Ok(permit) = connection_semaphore.clone().acquire_owned().await {
+                    if let Ok(connection) = incoming.await {
+                        let tx_clone = tx.clone();
+
+                        // Extract peer info from connection to populate DHT
+                        // Scope the extraction to ensure the non-Send Box<dyn Any> is dropped before the await
+                        let extracted_peer_id = {
+                            let mut id = None;
+                            if let Some(peer_identity) = connection.peer_identity() {
+                                if let Some(certs) = peer_identity.downcast_ref::<Vec<rustls::pki_types::CertificateDer<'static>>>() {
+                                    if let Some(cert) = certs.first() {
+                                        id = Some(derive_peer_id(cert));
+                                    }
+                                }
+                            }
+                            id
+                        };
+
+                        if let Some(peer_id) = extracted_peer_id {
+                            dht_clone.write().await.add_peer(peer_id);
+                        }
+
+                        tokio::spawn(async move {
+                            let _permit_holder = permit; // Hold permit until connection closes
+
+                            while let Ok(mut stream) = connection.accept_uni().await {
+                                // Anti-Slowloris: 5-second strict timeout on reading transaction payload
+                                if let Ok(Ok(buf)) =
+                                    timeout(Duration::from_secs(5), stream.read_to_end(1024 * 1024))
+                                        .await
+                                {
+                                    let _ = tx_clone.send(buf).await;
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
+
+        rx
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{Ipv4Addr, SocketAddrV4};
+
+    #[tokio::test]
+    async fn test_node_initialization() {
+        let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0));
+        let node = Node::new(addr).expect("Failed to initialize node");
+        assert!(node.endpoint.local_addr().is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_client_config() {
+        let dummy_peer_id = vec![0; 32];
+        let _config = Node::make_client_config(dummy_peer_id);
     }
 }
