@@ -1,0 +1,7 @@
+🎯 **What:** This PR addresses a testing gap in `core_node/src/lib.rs` by adding coverage for `new_api_method` and the three background initialization tasks.
+📊 **Coverage:** The new tests cover the successful initialization of:
+- `new_api_method()` (happy path logic)
+- `start_transaction_listener()`
+- `start_consensus_engine()`
+- `start_storage_maintenance()`
+✨ **Result:** Test coverage for `core_node/src/lib.rs` has been improved, guaranteeing these background tasks do not panic on setup and properly tick within the tokio runtime.
